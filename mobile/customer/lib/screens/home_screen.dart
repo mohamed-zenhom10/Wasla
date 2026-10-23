@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
+import 'package:main/pages/cargo_category_page.dart';
+import 'package:main/pages/your_activity_page.dart';
+import 'package:main/services/cargo_order_service.dart';
 import 'package:main/screens/login_screen.dart';
 import 'package:main/theme/app_theme.dart';
 
@@ -32,13 +35,22 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Trip requests will be available when the service is connected.',
-        ),
-      ),
+    _startOrder();
+  }
+
+  void _startOrder() {
+    final draft = CargoOrderDraft()
+      ..pickup = _pickupController.text.trim()
+      ..destination = _destinationController.text.trim();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
     );
+  }
+
+  void _openActivity() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const YourActivityPage()));
   }
 
   @override
@@ -169,14 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: TextStyle(fontSize: 12),
                     ),
                     TextButton.icon(
-                      onPressed: () => ScaffoldMessenger.of(context)
-                          .showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Cargo estimates will be available soon.',
-                              ),
-                            ),
-                          ),
+                      onPressed: _startOrder,
                       style: TextButton.styleFrom(
                         foregroundColor: AppColors.darkGreen,
                         padding: const EdgeInsets.only(top: 8),
@@ -210,6 +215,10 @@ class _HomeScreenState extends State<HomeScreen> {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
               );
+              return;
+            }
+            if (index == 1) {
+              _openActivity();
               return;
             }
             if (index != 0) {
