@@ -6,15 +6,19 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node --env-file=.env src/server.js",
-    "dev": "node --watch --env-file=.env src/server.js",
-    "check:db": "node --env-file=.env scripts/check-db.js"
+    "dev": "node --watch-path=src --env-file=.env src/server.js",
+    "check:db": "node --env-file=.env scripts/check-db.js",
+    "create-admin": "node --env-file=.env scripts/create-admin.js"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "jose": "^6.0.0",
+    "nodemailer": "^10.0.0",
     "pg": "^8.16.0"
   }
 }
