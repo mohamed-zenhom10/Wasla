@@ -1,10 +1,15 @@
 export class AppError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, extra) {
     super(message);
     this.status = status;
     this.code = code;
+    this.extra = extra;
   }
 }
+
+const CONSTRAINT_ERRORS = {
+  uq_users_email_ci: [409, 'EMAIL_TAKEN', 'This email is already registered'],
+};
 
 const DB_ERRORS = {
   23505: [409, 'ALREADY_EXISTS', 'This record already exists'],
@@ -31,7 +36,7 @@ export function toAppError(err) {
     return new AppError(413, 'TOO_LARGE', 'Request body is too large');
   }
 
-  const known = DB_ERRORS[err.code];
+  const known = CONSTRAINT_ERRORS[err.constraint] || DB_ERRORS[err.code];
   if (known) {
     const appError = new AppError(...known);
     appError.detail = err.message;
