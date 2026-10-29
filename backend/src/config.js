@@ -11,6 +11,11 @@ if (process.env.JWT_SECRET.length < 32) {
   process.exit(1);
 }
 
+if (process.env.BREVO_API_KEY && !process.env.MAIL_FROM) {
+  console.error('MAIL_FROM is needed when BREVO_API_KEY is set');
+  process.exit(1);
+}
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT) || 3000,
@@ -20,7 +25,9 @@ const config = {
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : false,
   },
+  trustProxy: process.env.TRUST_PROXY === 'true',
   corsOrigins: (process.env.CORS_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
@@ -32,6 +39,7 @@ const config = {
     user: process.env.SMTP_USER,
     password: process.env.SMTP_PASSWORD,
     from: process.env.MAIL_FROM || process.env.SMTP_USER,
+    brevoKey: process.env.BREVO_API_KEY,
   },
 };
 

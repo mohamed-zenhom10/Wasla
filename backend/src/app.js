@@ -10,6 +10,9 @@ import policiesRouter from './routes/policies.js';
 const app = express();
 
 app.disable('x-powered-by');
+if (config.trustProxy) {
+  app.set('trust proxy', 1);
+}
 app.use(cors({ origin: config.corsOrigins }));
 app.use(express.json({ limit: '1mb' }));
 
