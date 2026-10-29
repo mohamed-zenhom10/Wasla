@@ -8,14 +8,14 @@ import { loadProfile } from '../lib/users.js';
 import {
   cleanEmail, cleanPassword, cleanName, cleanPhone, cleanCode, cleanToken,
 } from '../lib/validate.js';
-import { rateLimit, emailOf } from '../middleware/rateLimit.js';
+import { rateLimit, emailOf, clientIp } from '../middleware/rateLimit.js';
 
 const router = Router();
 const SIGNUP_ROLES = ['customer', 'driver'];
 
-const loginLimit = rateLimit({ minutes: 15, max: 10, key: (req) => `${req.ip}|${emailOf(req)}` });
-const registerLimit = rateLimit({ minutes: 60, max: 50, key: (req) => req.ip });
-const emailLimit = rateLimit({ minutes: 15, max: 20, key: (req) => req.ip });
+const loginLimit = rateLimit({ minutes: 15, max: 10, key: (req) => `${clientIp(req)}|${emailOf(req)}` });
+const registerLimit = rateLimit({ minutes: 60, max: 50, key: clientIp });
+const emailLimit = rateLimit({ minutes: 15, max: 20, key: clientIp });
 
 router.post('/register', registerLimit, async (req, res) => {
   const body = req.body || {};

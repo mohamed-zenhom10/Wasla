@@ -1,3 +1,4 @@
+import config from '../config.js';
 import { AppError } from '../errors.js';
 
 export function rateLimit({ minutes, max, key }) {
@@ -36,4 +37,9 @@ export function rateLimit({ minutes, max, key }) {
 export function emailOf(req) {
   const email = req.body && typeof req.body.email === 'string' ? req.body.email : '';
   return email.trim().toLowerCase();
+}
+
+export function clientIp(req) {
+  const value = config.clientIpHeader ? req.get(config.clientIpHeader) : '';
+  return (value && value.trim()) || req.ip;
 }
