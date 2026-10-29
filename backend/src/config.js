@@ -28,6 +28,7 @@ const config = {
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : false,
   },
   trustProxy: process.env.TRUST_PROXY === 'true',
+  clientIpHeader: process.env.CLIENT_IP_HEADER,
   corsOrigins: (process.env.CORS_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
