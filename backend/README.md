@@ -22,6 +22,8 @@ Then copy `.env.example` to `.env` and fill it:
 - `DB_PASSWORD`: the same password
 - `JWT_SECRET`: any random text, at least 32 characters
 - `SMTP_*` and `MAIL_FROM`: the email account that sends the codes. If `SMTP_HOST` is empty, codes are printed in the terminal instead.
+- `BREVO_API_KEY`: sends the codes with Brevo instead of SMTP (Render's free plan blocks SMTP). `MAIL_FROM` must be a sender verified on Brevo.
+- `DB_SSL=true` for a hosted database like Neon, and `TRUST_PROXY=true` when the API runs behind a host like Render.
 
 Then run:
 
