@@ -109,3 +109,153 @@ class SmartBackhaulMock {
   static const returnRoute = 'Cairo → Alexandria';
   static const savings = 'EGP 140';
 }
+
+class DriverOption {
+  const DriverOption({
+    required this.id,
+    required this.name,
+    required this.vehicle,
+    required this.rating,
+    required this.price,
+    required this.available,
+    this.completed = 0,
+  });
+
+  final String id;
+  final String name;
+  final String vehicle;
+  final String rating;
+  final String price;
+  final String available;
+  final int completed;
+}
+
+class DriverMock {
+  const DriverMock._();
+
+  static const ahmed = DriverOption(
+    id: 'ahmed',
+    name: 'Ahmed Hassan',
+    vehicle: 'Quarter Truck',
+    rating: '4.9',
+    price: 'EGP 660',
+    available: '6 min away',
+    completed: 342,
+  );
+
+  static const mariam = DriverOption(
+    id: 'mariam',
+    name: 'Mariam Adel',
+    vehicle: 'Quarter Truck',
+    rating: '4.8',
+    price: 'EGP 680',
+    available: '9 min away',
+    completed: 218,
+  );
+
+  static const khaled = DriverOption(
+    id: 'khaled',
+    name: 'Khaled Nabil',
+    vehicle: 'Jumbo',
+    rating: '4.7',
+    price: 'EGP 1,120',
+    available: '12 min away',
+    completed: 156,
+  );
+
+  static const List<DriverOption> available = [ahmed, mariam, khaled];
+}
+
+class TrackingMock {
+  const TrackingMock._();
+
+  static const driverName = 'Ahmed Hassan';
+  static const driverRating = '4.9 ★';
+  static const vehicle = 'Quarter Truck • W-2408';
+  static const pickup = '12 Abbas El Akkad, Nasr City';
+  static const dropoff = '18 Road 9, Maadi';
+  static const progress = 0.65;
+  static const eta = '14 min';
+  static const stages = [
+    ('Pickup confirmed', true),
+    ('On the way', true),
+    ('Arrived at pickup', false),
+    ('In transit', false),
+    ('Out for delivery', false),
+    ('Delivered', false),
+  ];
+}
+
+class TripMock {
+  const TripMock._();
+
+  static const pickup = '12 Abbas El Akkad, Nasr City';
+  static const dropoff = '18 Road 9, Maadi';
+  static const reference = 'W-2408';
+  static const status = 'In transit';
+  static const pickupTime = 'Today, 09:12';
+  static const estimatedDelivery = 'By 10:02';
+  static const actualDelivery = '';
+  static const driverName = 'Ahmed Hassan';
+  static const driverRating = '4.9 ★';
+  static const vehicle = 'Quarter Truck • W-2408';
+  static const route = 'Nasr City → Maadi';
+  static const distance = '12.4 km';
+  static const duration = '42 min';
+  static const price = 'EGP 660';
+  static const items = [
+    'Two-seat sofa',
+    'Coffee table',
+    '3 medium boxes',
+  ];
+  static const stops = <String>[];
+}
+
+class ChatMock {
+  const ChatMock._();
+
+  static const messages = [
+    ChatMessage(
+      sender: 'driver',
+      text: 'On my way, will be there in 10 minutes.',
+      time: '09:25',
+    ),
+    ChatMessage(
+      sender: 'you',
+      text: 'Great, see you soon.',
+      time: '09:24',
+    ),
+    ChatMessage(
+      sender: 'driver',
+      text: 'I have your cargo. Gate is on the left.',
+      time: '09:15',
+    ),
+    ChatMessage(
+      sender: 'you',
+      text: 'Thanks, the gate is open.',
+      time: '09:14',
+    ),
+  ];
+}
+
+class ChatMessage {
+  const ChatMessage({
+    required this.sender,
+    required this.text,
+    required this.time,
+  });
+
+  final String sender;
+  final String text;
+  final String time;
+}
+
+class RatingMock {
+  const RatingMock._();
+
+  static const driverName = 'Ahmed Hassan';
+  static const vehicle = 'Quarter Truck';
+  static const route = 'Nasr City → Maadi';
+  static const date = 'Oct 30, 2026';
+  static const price = 'EGP 660';
+}
