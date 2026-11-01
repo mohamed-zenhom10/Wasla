@@ -9,7 +9,20 @@ export class AppError extends Error {
 
 const CONSTRAINT_ERRORS = {
   uq_users_email_ci: [409, 'EMAIL_TAKEN', 'This email is already registered'],
+  ck_settings_topup_range: [400, 'INVALID_INPUT', 'minTopupAmount must not be more than maxTopupAmount',
+    { field: 'minTopupAmount' }],
+  ck_settings_offline_after_stale: [400, 'INVALID_INPUT',
+    'autoOfflineAfterSeconds must be more than locationStaleSeconds', { field: 'autoOfflineAfterSeconds' }],
 };
+
+function duplicateField(detail) {
+  const match = /^Key \(([^)]+)\)=/.exec(detail || '');
+  if (!match) {
+    return undefined;
+  }
+  const column = match[1].split(',').pop().trim();
+  return { field: column.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()) };
+}
 
 const DB_ERRORS = {
   23505: [409, 'ALREADY_EXISTS', 'This record already exists'],
@@ -36,9 +49,13 @@ export function toAppError(err) {
     return new AppError(413, 'TOO_LARGE', 'Request body is too large');
   }
 
-  const known = CONSTRAINT_ERRORS[err.constraint] || DB_ERRORS[err.code];
+  const byConstraint = CONSTRAINT_ERRORS[err.constraint];
+  const known = byConstraint || DB_ERRORS[err.code];
   if (known) {
     const appError = new AppError(...known);
+    if (!byConstraint && err.code === '23505') {
+      appError.extra = duplicateField(err.detail);
+    }
     appError.detail = err.message;
     return appError;
   }

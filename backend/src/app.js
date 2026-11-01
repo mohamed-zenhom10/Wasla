@@ -6,6 +6,8 @@ import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
 import meRouter from './routes/me.js';
 import policiesRouter from './routes/policies.js';
+import catalogRouter from './routes/catalog.js';
+import adminRouter from './routes/admin/index.js';
 
 const app = express();
 
@@ -20,6 +22,8 @@ app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/me', meRouter);
 app.use('/api/policies', policiesRouter);
+app.use('/api/catalog', catalogRouter);
+app.use('/api/admin', adminRouter);
 
 app.use((req, res, next) => {
   next(new AppError(404, 'NOT_FOUND', 'Route not found'));
