@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
+import 'package:main/pages/delivery_proof_page.dart';
 import 'package:main/services/mock_data.dart';
 import 'package:main/theme/app_theme.dart';
 
@@ -160,7 +161,11 @@ class _DeliveryCompletePageState extends State<DeliveryCompletePage> {
       child: WaslaButton(
         text: 'Continue to delivery proof',
         variant: WaslaButtonVariant.primary,
-        onPressed: () => Navigator.of(context).pop(),
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const DeliveryProofPage(),
+          ),
+        ),
       ),
     );
   }

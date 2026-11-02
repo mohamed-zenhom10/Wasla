@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/cargo_components.dart';
-import 'package:main/pages/your_activity_page.dart';
+import 'package:main/screens/home_screen.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/theme/app_theme.dart';
 
@@ -32,10 +32,16 @@ class _CaptureCargoPageState extends State<CaptureCargoPage> {
     setState(() => _isSaving = true);
     final savedOrder = CargoOrderService.saveDemoOrder(widget.draft);
     if (!mounted) return;
-    await Navigator.of(context).pushReplacement(
+
+    final homeScreen = Navigator.of(context);
+    homeScreen.pushAndRemoveUntil(
       MaterialPageRoute<void>(
-        builder: (_) => YourActivityPage(savedOrder: savedOrder),
+        builder: (_) => HomeScreen(
+          initialTab: 1,
+          initialActivityOrder: savedOrder,
+        ),
       ),
+      (route) => false,
     );
   }
 

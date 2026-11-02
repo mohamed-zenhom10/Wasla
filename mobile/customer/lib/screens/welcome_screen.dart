@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
 import 'package:main/screens/login_screen.dart';
-import 'package:main/screens/phone_screen.dart';
+import 'package:main/screens/sign_up_screen.dart';
 import 'package:main/theme/app_theme.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -83,15 +83,6 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 32),
-              const Text(
-                'By continuing, you agree to our Terms and Privacy Policy.',
-                style: TextStyle(
-                  color: AppColors.darkGreen,
-                  fontSize: 12,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 16),
               OutlinedButton(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
@@ -108,9 +99,9 @@ class WelcomeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               MainButton(
-                text: 'Continue with phone',
+                text: 'Create account',
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const PhoneScreen()),
+                  MaterialPageRoute<void>(builder: (_) => const SignUpScreen()),
                 ),
                 borderRadius: 8,
               ),

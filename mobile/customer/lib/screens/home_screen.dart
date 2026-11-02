@@ -7,18 +7,48 @@ import 'package:main/screens/login_screen.dart';
 import 'package:main/theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, this.isPreview = false});
+  const HomeScreen({
+    super.key,
+    this.isPreview = false,
+    this.initialTab = 0,
+    this.initialActivityOrder,
+  });
 
   final bool isPreview;
+  final int initialTab;
+  final CargoActivityItem? initialActivityOrder;
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  HomeScreenState createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
   final _pickupController = TextEditingController();
   final _destinationController = TextEditingController();
   int _selectedTab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTab = widget.initialTab.clamp(0, _tabNames.length - 1);
+    _latestOrder = widget.initialActivityOrder;
+  }
+
+  void setTab(int index) {
+    final safeIndex = index.clamp(0, _tabNames.length - 1);
+    if (mounted && _selectedTab != safeIndex) {
+      setState(() => _selectedTab = safeIndex);
+    }
+  }
+
+  void showTrips({CargoActivityItem? order}) {
+    setTab(1);
+    if (order != null) {
+      setState(() { _latestOrder = order; });
+    }
+  }
+
+  CargoActivityItem? _latestOrder;
 
   @override
   void dispose() {
@@ -47,17 +77,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _openActivity() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const YourActivityPage()));
+  void _handleTripsTap() {
+    setTab(1);
+  }
+
+  void _goToHome() {
+    setTab(0);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      body: SafeArea(
+    final pages = <Widget>[
+      SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
           child: Column(
@@ -200,6 +231,21 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+      YourActivityPage(
+        savedOrder: _latestOrder,
+        onDone: () => setTab(0),
+      ),
+      const _PlaceholderTab(label: 'Messages'),
+      const _PlaceholderTab(label: 'Wallet'),
+      const _PlaceholderTab(label: 'Profile'),
+    ];
+
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: IndexedStack(
+        index: _selectedTab,
+        children: pages,
+      ),
       bottomNavigationBar: SafeArea(
         top: false,
         child: BottomNavigationBar(
@@ -210,17 +256,22 @@ class _HomeScreenState extends State<HomeScreen> {
           selectedFontSize: 10,
           unselectedFontSize: 10,
           onTap: (index) {
-            setState(() => _selectedTab = index);
             if (index == 4 && widget.isPreview) {
+              setTab(index);
               Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
               );
               return;
             }
             if (index == 1) {
-              _openActivity();
+              _handleTripsTap();
               return;
             }
+            if (index == 0) {
+              _goToHome();
+              return;
+            }
+            setTab(index);
             if (index != 0) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -258,6 +309,24 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 const _tabNames = ['Home', 'Trips', 'Messages', 'Wallet', 'Profile'];
+
+class _PlaceholderTab extends StatelessWidget {
+  const _PlaceholderTab({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Center(
+        child: Text(
+          '$label is not connected yet.',
+          style: const TextStyle(color: AppColors.darkGreen, fontSize: 16),
+        ),
+      ),
+    );
+  }
+}
 
 class _LocationInput extends StatelessWidget {
   const _LocationInput({

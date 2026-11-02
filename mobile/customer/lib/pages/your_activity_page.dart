@@ -4,9 +4,14 @@ import 'package:main/services/cargo_order_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class YourActivityPage extends StatelessWidget {
-  const YourActivityPage({super.key, this.savedOrder});
+  const YourActivityPage({
+    super.key,
+    this.savedOrder,
+    this.onDone,
+  });
 
   final CargoActivityItem? savedOrder;
+  final VoidCallback? onDone;
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +20,13 @@ class YourActivityPage extends StatelessWidget {
       title: 'Your activity',
       step: 0,
       buttonText: 'Done',
-      onContinue: () => Navigator.of(context).maybePop(),
+      onContinue: () {
+        if (onDone != null) {
+          onDone!.call();
+          return;
+        }
+        Navigator.of(context).pop();
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

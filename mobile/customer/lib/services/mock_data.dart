@@ -1,3 +1,5 @@
+library;
+
 /// Mock data for AI estimation, vehicle selection, scheduling, and booking review.
 /// Kept separate from UI widgets so it can be replaced with real API data later.
 
