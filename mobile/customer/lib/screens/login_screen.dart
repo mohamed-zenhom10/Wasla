@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:main/components/auth_components.dart';
 import 'package:main/screens/home_screen.dart';
 import 'package:main/screens/sign_up_screen.dart';
+import 'package:main/services/auth_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 final RegExp _emailRegex = RegExp(
@@ -25,6 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -33,11 +35,33 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _continue() {
+  Future<void> _continue() async {
     if (!_formKey.currentState!.validate()) return;
 
+    setState(() => _isSubmitting = true);
+
+    final result = await AuthService.login(
+      email: _emailController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    if (!mounted) return;
+
+    setState(() => _isSubmitting = false);
+
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
+
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(builder: (_) => const HomeScreen(isPreview: true)),
+      MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
     );
   }
 
@@ -49,6 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
       subtitle: 'Sign in with your email and password.',
       actionLabel: 'Continue',
       onAction: _continue,
+      isLoading: _isSubmitting,
       content: Form(
         key: _formKey,
         child: Column(
@@ -153,6 +178,7 @@ class ForgotPasswordEmailScreen extends StatefulWidget {
 class _ForgotPasswordEmailScreenState extends State<ForgotPasswordEmailScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -160,8 +186,28 @@ class _ForgotPasswordEmailScreenState extends State<ForgotPasswordEmailScreen> {
     super.dispose();
   }
 
-  void _continue() {
+  Future<void> _continue() async {
     if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isSubmitting = true);
+
+    final result = await AuthService.forgotPassword(
+      email: _emailController.text.trim(),
+    );
+
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
 
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -180,6 +226,7 @@ class _ForgotPasswordEmailScreenState extends State<ForgotPasswordEmailScreen> {
       subtitle: 'Enter the email address linked to your account.',
       actionLabel: 'Send code',
       onAction: _continue,
+      isLoading: _isSubmitting,
       content: Form(
         key: _formKey,
         child: LabeledInput(
@@ -209,6 +256,7 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen> {
   final _focusNodes = List.generate(6, (_) => FocusNode());
   int _secondsRemaining = 30;
   bool _isResending = false;
+  bool _isVerifying = false;
 
   @override
   void initState() {
@@ -279,7 +327,7 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen> {
     });
   }
 
-  void _continue() {
+  Future<void> _continue() async {
     if (_code.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter the 6-digit verification code.')),
@@ -287,9 +335,33 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen> {
       return;
     }
 
+    setState(() => _isVerifying = true);
+
+    final result = await AuthService.verifyEmail(
+      email: widget.email,
+      code: _code,
+    );
+
+    if (!mounted) return;
+    setState(() => _isVerifying = false);
+
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
+
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ForgotPasswordNewPasswordScreen(email: widget.email),
+        builder: (_) => ForgotPasswordNewPasswordScreen(
+          email: widget.email,
+          otp: _code,
+        ),
       ),
     );
   }
@@ -302,6 +374,7 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen> {
       subtitle: 'Enter the 6-digit code sent to ${widget.email}.',
       actionLabel: 'Verify and continue',
       onAction: _continue,
+      isLoading: _isVerifying,
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -385,9 +458,14 @@ class _ForgotPasswordOtpScreenState extends State<ForgotPasswordOtpScreen> {
 }
 
 class ForgotPasswordNewPasswordScreen extends StatefulWidget {
-  const ForgotPasswordNewPasswordScreen({super.key, required this.email});
+  const ForgotPasswordNewPasswordScreen({
+    super.key,
+    required this.email,
+    required this.otp,
+  });
 
   final String email;
+  final String otp;
 
   @override
   State<ForgotPasswordNewPasswordScreen> createState() =>
@@ -409,11 +487,31 @@ class _ForgotPasswordNewPasswordScreenState
     super.dispose();
   }
 
-  void _continue() {
+  bool _isUpdating = false;
+
+  Future<void> _continue() async {
     if (!_formKey.currentState!.validate()) return;
 
+    setState(() => _isUpdating = true);
+
+    final result = await AuthService.resetPassword(
+      email: widget.email,
+      otp: widget.otp,
+      password: _passwordController.text,
+    );
+
+    if (!mounted) return;
+    setState(() => _isUpdating = false);
+
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Password updated successfully.')),
+      SnackBar(content: Text(result.message)),
     );
 
     Navigator.of(context).pushAndRemoveUntil(
@@ -430,6 +528,7 @@ class _ForgotPasswordNewPasswordScreenState
       subtitle: 'Choose a strong password for ${widget.email}.',
       actionLabel: 'Update password',
       onAction: _continue,
+      isLoading: _isUpdating,
       content: Form(
         key: _formKey,
         child: Column(

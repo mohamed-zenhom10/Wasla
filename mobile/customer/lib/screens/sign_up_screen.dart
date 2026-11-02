@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:main/components/auth_components.dart';
 import 'package:main/screens/otp_screen.dart';
+import 'package:main/services/auth_service.dart';
 import 'package:main/theme/app_theme.dart';
+
+final RegExp _signUpPasswordRegex = RegExp(
+  r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{8,}$',
+);
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -13,20 +18,25 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController(text: 'Mariam Adel');
-  final _phoneController = TextEditingController(text: '100 234 5678');
-  final _emailController = TextEditingController(text: 'mariam.adel@email.com');
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _acceptedTerms = false;
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _continue() {
+  Future<void> _continue() async {
     if (!_acceptedTerms || !_formKey.currentState!.validate()) {
       if (!_acceptedTerms) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -37,10 +47,37 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
       return;
     }
+
+    setState(() => _isSubmitting = true);
+
+    final result = await AuthService.register(
+      fullName: _nameController.text.trim(),
+      email: _emailController.text.trim(),
+      phone: _phoneController.text.trim(),
+      password: _passwordController.text,
+    );
+
+    if (!mounted) return;
+
+    setState(() => _isSubmitting = false);
+
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
+
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            OtpScreen(phoneNumber: '+20 ${_phoneController.text.trim()}'),
+        builder: (_) => OtpScreen(
+          email: _emailController.text.trim(),
+          phoneNumber: '+20 ${_phoneController.text.trim()}',
+        ),
       ),
     );
   }
@@ -52,6 +89,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       title: "Let's get moving",
       actionLabel: 'Continue',
       onAction: _continue,
+      isLoading: _isSubmitting,
       content: Form(
         key: _formKey,
         child: Column(
@@ -87,16 +125,46 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ),
             const SizedBox(height: 18),
             LabeledInput(
-              label: 'Email - optional',
+              label: 'Email',
               controller: _emailController,
               icon: Icons.mail_outline,
               keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.done,
+              textInputAction: TextInputAction.next,
               validator: (value) {
-                if ((value ?? '').trim().isEmpty) return null;
-                return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value!)
+                final email = (value ?? '').trim();
+                if (email.isEmpty) {
+                  return 'Enter your email address';
+                }
+                return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)
                     ? null
                     : 'Enter a valid email address';
+              },
+            ),
+            const SizedBox(height: 18),
+            LabeledInput(
+              label: 'Password',
+              controller: _passwordController,
+              icon: Icons.lock_outline,
+              obscureText: true,
+              textInputAction: TextInputAction.next,
+              validator: _signUpPasswordValidator,
+            ),
+            const SizedBox(height: 18),
+            LabeledInput(
+              label: 'Confirm password',
+              controller: _confirmPasswordController,
+              icon: Icons.lock_reset,
+              obscureText: true,
+              textInputAction: TextInputAction.done,
+              validator: (value) {
+                final confirm = (value ?? '').trim();
+                if (confirm.isEmpty) {
+                  return 'Confirm your password';
+                }
+                if (confirm != _passwordController.text) {
+                  return 'Passwords do not match';
+                }
+                return null;
               },
             ),
             const SizedBox(height: 12),
@@ -122,4 +190,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ),
     );
   }
+}
+
+String? _signUpPasswordValidator(String? value) {
+  final password = value ?? '';
+  if (password.isEmpty) {
+    return 'Enter your password';
+  }
+  if (!_signUpPasswordRegex.hasMatch(password)) {
+    return 'Use at least 8 characters, an uppercase letter, a lowercase letter, and a number';
+  }
+  return null;
 }

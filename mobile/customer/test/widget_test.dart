@@ -74,33 +74,29 @@ void main() {
     expect(preferences.getBool('onboarding_completed'), isTrue);
   });
 
-  testWidgets('phone verification opens an explicitly marked home preview', (
+  testWidgets('email login screen shows the current email and password flow', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(const MaterialApp(home: WelcomeScreen()));
-    await tester.tap(find.text('Continue with phone'));
+    await tester.tap(find.text('I already have an account'));
     await tester.pumpAndSettle();
-    expect(find.text('Your phone number'), findsOneWidget);
 
-    await tester.tap(find.text('Send verification code'));
-    await tester.pumpAndSettle();
-    expect(find.text('Check your messages'), findsOneWidget);
+    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Email'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.text('Forgot password?'), findsOneWidget);
 
-    final otpFields = find.byType(TextField);
-    for (var index = 0; index < 6; index++) {
-      await tester.enterText(otpFields.at(index), '${index + 1}');
-    }
-    await tester.tap(find.text('Verify and continue'));
+    await tester.tap(find.text('Forgot password?'));
     await tester.pumpAndSettle();
-    expect(find.text('Verification unavailable'), findsOneWidget);
 
-    await tester.tap(find.text('View home preview'));
-    await tester.pumpAndSettle();
-    expect(find.text('Morning, Mariam'), findsOneWidget);
-    expect(find.text('Preview only - not signed in'), findsOneWidget);
+    expect(find.text('Forgot password'), findsOneWidget);
+    expect(
+      find.text('Enter the email address linked to your account.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('welcome account action navigates through login to sign up', (

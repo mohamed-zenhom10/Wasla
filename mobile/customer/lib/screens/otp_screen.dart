@@ -4,12 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:main/components/auth_components.dart';
 import 'package:main/screens/home_screen.dart';
+import 'package:main/services/auth_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class OtpScreen extends StatefulWidget {
-  const OtpScreen({super.key, required this.phoneNumber});
+  const OtpScreen({
+    super.key,
+    this.email,
+    this.phoneNumber,
+  }) : assert(email != null || phoneNumber != null);
 
-  final String phoneNumber;
+  final String? email;
+  final String? phoneNumber;
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -74,8 +80,17 @@ class _OtpScreenState extends State<OtpScreen> {
     return KeyEventResult.ignored;
   }
 
-  void _resendCode() {
+  Future<void> _resendCode() async {
+    final email = widget.email;
+    if (email == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Code resend is only available for email verification.')),
+      );
+      return;
+    }
+
     if (_secondsRemaining > 0) return;
+
     setState(() => _secondsRemaining = 24);
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsRemaining <= 1) {
@@ -85,20 +100,56 @@ class _OtpScreenState extends State<OtpScreen> {
         setState(() => _secondsRemaining--);
       }
     });
+
+    final result = await AuthService.resendCode(email: email);
+    if (!mounted) return;
+
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('SMS delivery needs an authentication service.'),
-      ),
+      SnackBar(content: Text(result.message)),
     );
   }
 
   Future<void> _verify() async {
+    final email = widget.email;
     if (_code.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter the 6-digit verification code.')),
       );
       return;
     }
+
+    if (email != null) {
+      final result = await AuthService.verifyEmail(
+        email: email,
+        code: _code,
+      );
+
+      if (!mounted) return;
+
+      if (!result.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.message)),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.message)),
+      );
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+      );
+      return;
+    }
+
     final openPreview = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -131,8 +182,10 @@ class _OtpScreenState extends State<OtpScreen> {
   Widget build(BuildContext context) {
     return AuthPageScaffold(
       eyebrow: '',
-      title: 'Check your messages',
-      subtitle: 'Enter the 6-digit code sent to ${widget.phoneNumber}.',
+      title: widget.email != null ? 'Check your email' : 'Check your messages',
+      subtitle: widget.email != null
+          ? 'Enter the 6-digit code sent to ${widget.email}.'
+          : 'Enter the 6-digit code sent to ${widget.phoneNumber}.',
       actionLabel: 'Verify and continue',
       onAction: _verify,
       trailing: const Icon(Icons.notifications_none, size: 21),
