@@ -11,6 +11,32 @@ if (process.env.JWT_SECRET.length < 32) {
   process.exit(1);
 }
 
+function readCloudinary(value) {
+  if (!value) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'cloudinary:' || !url.username || !url.password || !url.hostname) {
+      throw new Error('bad');
+    }
+    return {
+      cloudName: url.hostname,
+      apiKey: decodeURIComponent(url.username),
+      apiSecret: decodeURIComponent(url.password),
+    };
+  } catch {
+    console.error('CLOUDINARY_URL must look like cloudinary://<api_key>:<api_secret>@<cloud_name>');
+    process.exit(1);
+  }
+}
+
+const cloudinary = readCloudinary(process.env.CLOUDINARY_URL);
+if (process.env.NODE_ENV === 'production' && !cloudinary) {
+  console.error('CLOUDINARY_URL is needed in production, photos cannot be saved on the server');
+  process.exit(1);
+}
+
 if (process.env.BREVO_API_KEY && !process.env.MAIL_FROM) {
   console.error('MAIL_FROM is needed when BREVO_API_KEY is set');
   process.exit(1);
@@ -34,6 +60,7 @@ const config = {
     .map((origin) => origin.trim())
     .filter(Boolean),
   jwtSecret: process.env.JWT_SECRET,
+  cloudinary,
   mail: {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT) || 587,

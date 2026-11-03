@@ -8,6 +8,7 @@ import meRouter from './routes/me.js';
 import policiesRouter from './routes/policies.js';
 import catalogRouter from './routes/catalog.js';
 import adminRouter from './routes/admin/index.js';
+import filesRouter from './routes/files.js';
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api/me', meRouter);
 app.use('/api/policies', policiesRouter);
 app.use('/api/catalog', catalogRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/files', filesRouter);
 
 app.use((req, res, next) => {
   next(new AppError(404, 'NOT_FOUND', 'Route not found'));

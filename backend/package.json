@@ -8,7 +8,8 @@
     "start": "node --env-file-if-exists=.env src/server.js",
     "dev": "node --watch-path=src --env-file=.env src/server.js",
     "check:db": "node --env-file=.env scripts/check-db.js",
-    "create-admin": "node --env-file=.env scripts/create-admin.js"
+    "create-admin": "node --env-file=.env scripts/create-admin.js",
+    "check:storage": "node --env-file=.env scripts/check-storage.js"
   },
   "engines": {
     "node": ">=22.9"
