@@ -60,12 +60,12 @@ export async function insertRow(client, table, fields, values, returning) {
   return row;
 }
 
-export async function updateRow(client, table, fields, id, values, returning) {
+export async function updateRow(client, table, fields, id, values, returning, key = 'id') {
   const columns = Object.keys(values);
   const { rows: [row] } = await client.query(
     `UPDATE ${table}
      SET ${columns.map((column, i) => `${column} = ${placeholder(fields, column, i + 2)}`).join(', ')}
-     WHERE id = $1
+     WHERE ${key} = $1
      RETURNING ${returning}`,
     [id, ...Object.values(values)],
   );

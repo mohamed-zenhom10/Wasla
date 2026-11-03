@@ -21,6 +21,7 @@ Then copy `.env.example` to `.env` and fill it:
 
 - `DB_PASSWORD`: the same password
 - `JWT_SECRET`: any random text, at least 32 characters
+- `NATIONAL_ID_KEY`: another random text, at least 32 characters. Do not change it after drivers sign up, or the same national ID could be registered twice.
 - `CLOUDINARY_URL`: the "API environment variable" from the Cloudinary dashboard. Driver photos are saved there. If it is empty, photos are saved in the `uploads` folder (only for running on your computer).
 - `SMTP_*` and `MAIL_FROM`: the email account that sends the codes. If `SMTP_HOST` is empty, codes are printed in the terminal instead.
 - `BREVO_API_KEY`: sends the codes with Brevo instead of SMTP (Render's free plan blocks SMTP). `MAIL_FROM` must be a sender verified on Brevo.

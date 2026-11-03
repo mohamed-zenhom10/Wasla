@@ -217,6 +217,98 @@ If the point is inside two zones, the smaller one is returned.
 
 Errors: `INVALID_INPUT` (`lat` from -90 to 90, `lng` from -180 to 180)
 
+## Driver application
+
+Everything under `/driver` needs a driver account (`role: "driver"` at sign up). Others get `403` with `ROLE_REQUIRED`.
+
+The steps: personal information, 5 photos, a vehicle with 6 photos, a payout account, then send for review. They can be done in any order after the personal information.
+
+Every request below returns the whole application, so the app can redraw the screens from one shape:
+
+```json
+{
+  "application": {
+    "status": "draft",
+    "submittedAt": null, "reviewedAt": null, "rejectionReason": null,
+    "profile": { "cityId": "1", "dateOfBirth": "1995-05-14", "nationalIdLast4": "1234", "maxHelpers": 2 },
+    "documents": [
+      { "id": "7", "type": "driving_license_front", "status": "pending", "licenseCategory": "professional_3",
+        "expiresOn": null, "rejectionCode": null, "rejectionReason": null, "uploadedAt": "...", "reviewedAt": null,
+        "url": "https://..." }
+    ],
+    "vehicles": [
+      { "id": "3", "vehicleTypeId": "2", "plateNumber": "ABC 123", "make": "Suzuki", "model": "Carry",
+        "manufactureYear": 2018, "color": "White", "maxPayloadKg": 1500, "status": "pending_review", "documents": [ ] }
+    ],
+    "payoutAccount": { "id": "4", "method": "wallet", "holderName": "...", "bankName": "Vodafone Cash", "accountLast4": "4567", "status": "pending", "rejectionCode": null, "rejectionReason": null, "createdAt": "..." },
+    "missing": ["vehicle_documents", "payout_account"]
+  }
+}
+```
+
+- `status`: `not_started` (no personal information yet), `draft`, `pending` (sent, waiting for the admin), `approved`, `rejected` (final, the driver cannot apply again).
+- A document `status` is `pending`, `approved` or `rejected`. A rejected document has `rejectionCode` (`blurry`, `expiry_unreadable`, `expired`, `name_mismatch`, `wrong_document`, `other`) and `rejectionReason`. The driver uploads a new photo of the same type, the application stays `pending`.
+- `url` opens the photo for 1 hour. Load the application again to get new links.
+- `missing` (only in `draft`) is what is left before sending: the document types, `profile`, `vehicle_documents` (a vehicle with its 6 photos), `payout_account`, `accepted_terms`, `min_age`, `active_city`, `national_id`, `license_too_low` (the license category is lower than the vehicle type needs).
+- `expiresOn` is written by the admin from the photo, the driver does not send it.
+
+### GET /driver/application
+
+### PUT /driver/profile
+
+```json
+{ "cityId": "1", "dateOfBirth": "1995-05-14", "nationalId": "29505140101234", "maxHelpers": 2 }
+```
+
+- The first time all fields are needed except `maxHelpers` (0 to 20, how many workers the driver can bring). After that send only what changes.
+- `nationalId` is the 14 digits of the Egyptian national ID. Arabic digits are fine. `dateOfBirth` must match it, so send the two together.
+- The driver must be at least `minDriverAge` (from `GET /catalog`).
+- The national ID is never returned, only `nationalIdLast4`.
+
+Errors: `INVALID_INPUT`, `NATIONAL_ID_TAKEN`, `APPLICATION_LOCKED` (only a `draft` can change)
+
+### PUT /driver/documents/:type
+
+`type` is `profile_photo`, `national_id_front`, `national_id_back`, `driving_license_front` or `driving_license_back`.
+
+The body is the photo itself (not JSON), with `Content-Type: image/jpeg`, `image/png` or `image/webp`, at most 5 MB. For the license front add the category: `PUT /driver/documents/driving_license_front?licenseCategory=professional_3` (`private`, `professional_3`, `professional_2`, `professional_1`).
+
+In Flutter: `http.put(uri, headers: {'Authorization': 'Bearer $token', 'Content-Type': 'image/jpeg'}, body: await file.readAsBytes())`. Use `imageQuality` in `image_picker` to keep the photo small.
+
+A new photo of the same type replaces the old one. Returns `201`.
+
+Errors: `PROFILE_REQUIRED` (save the personal information first), `INVALID_IMAGE`, `UNSUPPORTED_IMAGE`, `TOO_LARGE`, `STORAGE_FAILED` (try again), `APPLICATION_LOCKED` (rejected application)
+
+### POST /driver/vehicles
+
+```json
+{ "vehicleTypeId": "2", "plateNumber": "ABC 123", "make": "Suzuki", "model": "Carry", "manufactureYear": 2018, "color": "White" }
+```
+
+`vehicleTypeId` comes from `GET /catalog`. The max payload is taken from the vehicle type. Returns `201`.
+
+Errors: `INVALID_INPUT`, `PLATE_TAKEN`, `PROFILE_REQUIRED`, `APPLICATION_LOCKED` (while `pending`)
+
+### PATCH /driver/vehicles/:id
+
+Same fields, only what changes. Only before the application is sent.
+
+Errors: `VEHICLE_LOCKED`, `APPLICATION_LOCKED`, `NOT_FOUND`
+
+### PUT /driver/vehicles/:id/documents/:type
+
+Same as the driver photos. `type` is `vehicle_license_front`, `vehicle_license_back`, `vehicle_photo_front`, `vehicle_photo_side`, `vehicle_photo_rear` or `vehicle_photo_cargo`.
+
+### POST /driver/application/submit
+
+```json
+{ "confirm": true }
+```
+
+`confirm` is the "these documents are mine" checkbox. Returns the application with `status: "pending"`.
+
+Errors: `APPLICATION_INCOMPLETE` (has `missing`, same list as above), `INVALID_INPUT` (`confirm`), `APPLICATION_LOCKED`
+
 ## Payout account
 
 For any logged in user. Drivers get their earnings here every week, customers will use it to take money out of their wallet.

@@ -9,6 +9,9 @@ export class AppError extends Error {
 
 const CONSTRAINT_ERRORS = {
   uq_users_email_ci: [409, 'EMAIL_TAKEN', 'This email is already registered'],
+  driver_profiles_national_id_hash_key: [409, 'NATIONAL_ID_TAKEN', 'This national ID is already registered',
+    { field: 'nationalId' }],
+  vehicles_plate_number_key: [409, 'PLATE_TAKEN', 'This plate number is already registered', { field: 'plateNumber' }],
   ck_settings_topup_range: [400, 'INVALID_INPUT', 'minTopupAmount must not be more than maxTopupAmount',
     { field: 'minTopupAmount' }],
   ck_settings_offline_after_stale: [400, 'INVALID_INPUT',

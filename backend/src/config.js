@@ -1,4 +1,4 @@
-const required = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'JWT_SECRET'];
+const required = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'JWT_SECRET', 'NATIONAL_ID_KEY'];
 const missing = required.filter((key) => !process.env[key]);
 
 if (missing.length > 0) {
@@ -8,6 +8,11 @@ if (missing.length > 0) {
 
 if (process.env.JWT_SECRET.length < 32) {
   console.error('JWT_SECRET must be at least 32 characters');
+  process.exit(1);
+}
+
+if (process.env.NATIONAL_ID_KEY.length < 32) {
+  console.error('NATIONAL_ID_KEY must be at least 32 characters');
   process.exit(1);
 }
 
@@ -60,6 +65,7 @@ const config = {
     .map((origin) => origin.trim())
     .filter(Boolean),
   jwtSecret: process.env.JWT_SECRET,
+  nationalIdKey: process.env.NATIONAL_ID_KEY,
   cloudinary,
   mail: {
     host: process.env.SMTP_HOST,
