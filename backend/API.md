@@ -230,7 +230,7 @@ Every request below returns the whole application, so the app can redraw the scr
   "application": {
     "status": "draft",
     "submittedAt": null, "reviewedAt": null, "rejectionReason": null,
-    "profile": { "cityId": "1", "dateOfBirth": "1995-05-14", "nationalIdLast4": "1234", "maxHelpers": 2 },
+    "profile": { "cityId": "1", "dateOfBirth": "1995-05-14", "nationalIdLast4": "1234", "maxHelpers": 2, "activeVehicleId": null },
     "documents": [
       { "id": "7", "type": "driving_license_front", "status": "pending", "licenseCategory": "professional_3",
         "expiresOn": null, "rejectionCode": null, "rejectionReason": null, "uploadedAt": "...", "reviewedAt": null,
@@ -405,6 +405,48 @@ Map libraries give this format directly. Lines that cross each other are refused
 ```
 
 Rates are from 0 to 1 (`0.15` is 15%). `minTopupAmount` cannot be more than `maxTopupAmount`, and `autoOfflineAfterSeconds` must be more than `locationStaleSeconds`.
+
+### Driver applications
+
+- `GET /admin/drivers?status=pending&search=ahmed&page=1`: 20 per page, oldest first. `status` is `draft`, `pending`, `needs_fix` (pending with a rejected photo), `approved` or `rejected`. `search` looks in the name, email and phone. Returns `drivers` (each with `needsFix` and `pendingDocuments`), `page`, `pageSize` and `total`.
+- `GET /admin/drivers/:id`: returns `driver` (name, email, phone, language, accountStatus) and `application`, the same as the driver sees plus `reviewedBy` on each photo, the full `payoutAccount.accountNumber`, the vehicle `cargoLengthM`, `cargoWidthM`, `cargoHeightM`, and `approvalMissing` (what stops the approval).
+
+Every request below returns the same `{ driver, application }`.
+
+### Reviewing a photo
+
+- `POST /admin/driver-documents/:id/review`
+- `POST /admin/vehicle-documents/:id/review`
+
+```json
+{ "decision": "approve", "expiresOn": "2030-06-30" }
+{ "decision": "reject", "rejectionCode": "blurry", "rejectionReason": "The numbers cannot be read." }
+```
+
+- `expiresOn` is needed when approving `national_id_front`, `driving_license_front` and `vehicle_license_front` (read it from the photo), and not allowed for the others. It must be after today, an expired document is rejected with `expired`.
+- When approving `driving_license_front` you can also send `licenseCategory` to correct what the driver chose.
+- `rejectionCode`: `blurry`, `expiry_unreadable`, `expired`, `name_mismatch`, `wrong_document`, `other`.
+- A rejected photo does not reject the application. The driver gets an email and uploads a new one.
+
+Errors: `ALREADY_REVIEWED`, `DOCUMENT_REPLACED` (the driver uploaded a newer photo, review that one), `WRONG_STATUS` (the application was not sent yet or is rejected)
+
+### Approving or rejecting the driver
+
+- `POST /admin/drivers/:id/approve` (optional `reason`): only when every photo is approved and the licenses are not expired. It also activates the vehicle and makes it the driver's current vehicle. The driver gets an email.
+- `POST /admin/drivers/:id/reject` with `{ "reason": "..." }`: final, the driver cannot apply again. The driver gets an email with the reason.
+
+Errors: `APPROVAL_INCOMPLETE` (has `missing`), `WRONG_STATUS` (only a `pending` application)
+
+### Vehicles
+
+- `PATCH /admin/vehicles/:id`: `maxPayloadKg`, `cargoLengthM`, `cargoWidthM`, `cargoHeightM`, if the vehicle license says something different.
+- `POST /admin/vehicles/:id/activate`: for another vehicle of an approved driver, after its 6 photos are approved.
+- `POST /admin/vehicles/:id/reject` with `{ "reason": "..." }`.
+
+### Payout accounts
+
+- `GET /admin/payout-accounts?status=pending`: current accounts with the full account number, of drivers and customers.
+- `POST /admin/payout-accounts/:id/review`: `{ "decision": "approve" }` or `{ "decision": "reject", "rejectionCode": "name_mismatch", "rejectionReason": "..." }`. Codes: `name_mismatch`, `invalid_account`, `unsupported_bank`, `other`. The user gets an email when it is rejected.
 
 ### Terms and privacy
 

@@ -21,10 +21,10 @@ function validDate(year, month, day) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-export function cleanBirthDate(value, field) {
+export function cleanDate(value, field) {
   const match = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(typeof value === 'string' ? value.trim() : '');
   if (!match || !validDate(Number(match[1]), Number(match[2]), Number(match[3]))) {
-    throw invalid(field, 'dateOfBirth must be a real date like 1995-05-14');
+    throw invalid(field, `${field} must be a real date like 2028-05-14`);
   }
   return match[0];
 }
@@ -59,9 +59,9 @@ export function applicationClosed(status) {
 }
 
 const DOCUMENT_COLUMNS = `id, document_type, license_category, storage_key, expires_on::text AS expires_on,
-  review_status, rejection_code, rejection_reason, uploaded_at, reviewed_at`;
+  review_status, rejection_code, rejection_reason, uploaded_at, reviewed_at, reviewed_by`;
 
-function toDocument(row, baseUrl) {
+function toDocument(row, baseUrl, admin) {
   const document = {
     id: row.id,
     type: row.document_type,
@@ -76,11 +76,14 @@ function toDocument(row, baseUrl) {
   if (row.document_type === 'driving_license_front') {
     document.licenseCategory = row.license_category;
   }
+  if (admin) {
+    document.reviewedBy = row.reviewed_by;
+  }
   return document;
 }
 
-function toVehicle(row, documents) {
-  return {
+function toVehicle(row, documents, admin) {
+  const vehicle = {
     id: row.id,
     vehicleTypeId: row.vehicle_type_id,
     plateNumber: row.plate_number,
@@ -92,6 +95,12 @@ function toVehicle(row, documents) {
     status: row.status,
     documents,
   };
+  if (admin) {
+    vehicle.cargoLengthM = row.cargo_length_m === null ? null : Number(row.cargo_length_m);
+    vehicle.cargoWidthM = row.cargo_width_m === null ? null : Number(row.cargo_width_m);
+    vehicle.cargoHeightM = row.cargo_height_m === null ? null : Number(row.cargo_height_m);
+  }
+  return vehicle;
 }
 
 export async function missingForSubmit(client, userId) {
@@ -110,11 +119,23 @@ export async function missingForSubmit(client, userId) {
   return row.license_too_low ? [...row.missing, 'license_too_low'] : row.missing;
 }
 
-export async function loadApplication(userId, baseUrl) {
+export async function approvalMissing(client, userId) {
+  const { rows: [row] } = await client.query(
+    `SELECT driver_approval_missing($1) AS missing,
+            (driver_current_license($1)).id IS NOT NULL AND NOT EXISTS (
+              SELECT 1 FROM vehicles v WHERE v.driver_id = $1 AND v.status IN ('pending_review', 'active')
+                AND license_fits_vehicle($1, v.id)
+            ) AS license_too_low`,
+    [userId],
+  );
+  return row.license_too_low ? [...row.missing, 'license_too_low'] : row.missing;
+}
+
+export async function loadApplication(userId, baseUrl, admin = false) {
   const [profile, documents, vehicles, vehicleDocuments, payout] = await Promise.all([
     query(
       `SELECT verification_status, submitted_at, reviewed_at, rejection_reason, city_id,
-              date_of_birth::text AS date_of_birth, national_id_last4, max_helpers
+              date_of_birth::text AS date_of_birth, national_id_last4, max_helpers, active_vehicle_id
        FROM driver_profiles WHERE user_id = $1`,
       [userId],
     ),
@@ -126,7 +147,7 @@ export async function loadApplication(userId, baseUrl) {
     query('SELECT * FROM vehicles WHERE driver_id = $1 ORDER BY id', [userId]),
     query(
       `SELECT d.vehicle_id, d.id, d.document_type, d.storage_key, d.expires_on::text AS expires_on,
-              d.review_status, d.rejection_code, d.rejection_reason, d.uploaded_at, d.reviewed_at
+              d.review_status, d.rejection_code, d.rejection_reason, d.uploaded_at, d.reviewed_at, d.reviewed_by
        FROM vehicle_documents d JOIN vehicles v ON v.id = d.vehicle_id
        WHERE v.driver_id = $1 AND d.superseded_at IS NULL ORDER BY d.document_type, d.uploaded_at`,
       [userId],
@@ -141,6 +162,10 @@ export async function loadApplication(userId, baseUrl) {
   } else if (p.verification_status === 'draft') {
     missing = await missingForSubmit({ query }, userId);
   }
+  const payoutAccount = toPayoutAccount(payout.rows[0]);
+  if (admin && payoutAccount) {
+    payoutAccount.accountNumber = payout.rows[0].account_number;
+  }
 
   return {
     status: p ? p.verification_status : 'not_started',
@@ -152,13 +177,17 @@ export async function loadApplication(userId, baseUrl) {
       dateOfBirth: p.date_of_birth,
       nationalIdLast4: p.national_id_last4,
       maxHelpers: p.max_helpers,
+      activeVehicleId: p.active_vehicle_id,
     } : null,
-    documents: documents.rows.map((row) => toDocument(row, baseUrl)),
+    documents: documents.rows.map((row) => toDocument(row, baseUrl, admin)),
     vehicles: vehicles.rows.map((row) => toVehicle(
       row,
-      vehicleDocuments.rows.filter((d) => d.vehicle_id === row.id).map((d) => toDocument(d, baseUrl)),
+      vehicleDocuments.rows.filter((d) => d.vehicle_id === row.id).map((d) => toDocument(d, baseUrl, admin)),
+      admin,
     )),
-    payoutAccount: toPayoutAccount(payout.rows[0]),
+    payoutAccount,
     missing,
+    ...(admin && p && p.verification_status === 'pending'
+      ? { approvalMissing: await approvalMissing({ query }, userId) } : {}),
   };
 }

@@ -10,7 +10,7 @@ import {
   IMAGE_TYPES, MAX_IMAGE_MB, readImage, saveImage,
 } from '../lib/storage.js';
 import {
-  DRIVER_DOCUMENTS, VEHICLE_DOCUMENTS, cleanBirthDate, cleanNationalId, nationalIdHash, ageOn,
+  DRIVER_DOCUMENTS, VEHICLE_DOCUMENTS, cleanDate, cleanNationalId, nationalIdHash, ageOn,
   applicationClosed, missingForSubmit, loadApplication,
 } from '../lib/driver.js';
 
@@ -48,7 +48,7 @@ function requireProfile(status) {
 
 const profileFields = {
   cityId: { column: 'city_id', clean: cleanRef, required: true },
-  dateOfBirth: { column: 'date_of_birth', clean: cleanBirthDate, required: true },
+  dateOfBirth: { column: 'date_of_birth', clean: cleanDate, required: true },
   nationalId: { column: 'national_id', clean: cleanNationalId, required: true },
   maxHelpers: { column: 'max_helpers', clean: (v, f) => cleanInteger(v, f, 0, 20) },
 };
