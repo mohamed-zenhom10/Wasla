@@ -217,6 +217,23 @@ If the point is inside two zones, the smaller one is returned.
 
 Errors: `INVALID_INPUT` (`lat` from -90 to 90, `lng` from -180 to 180)
 
+## Payout account
+
+For any logged in user. Drivers get their earnings here every week, customers will use it to take money out of their wallet.
+
+### GET /me/payout-account
+
+Returns `{ "payoutAccount": { ... } }` or `{ "payoutAccount": null }`. Only the last 4 digits of the account are returned.
+
+### PUT /me/payout-account
+
+```json
+{ "method": "bank_account", "holderName": "Ahmed Hassan", "bankName": "National Bank of Egypt", "accountNumber": "EG380019000500000000263180002" }
+```
+
+- `method` is `bank_account` or `wallet`. `bankName` is needed for a bank, and for a wallet it can be the provider (`Vodafone Cash`).
+- A new account replaces the old one and waits for the admin again. Returns `201`.
+
 ## Admin
 
 Everything under `/admin` needs an admin account. Others get `403` with `ROLE_REQUIRED`.
