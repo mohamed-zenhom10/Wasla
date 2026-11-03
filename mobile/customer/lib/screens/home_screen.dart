@@ -7,6 +7,7 @@ import 'package:main/screens/login_screen.dart';
 import 'package:main/theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
+<<<<<<< HEAD
   const HomeScreen({super.key, this.isPreview = false});
 
   final bool isPreview;
@@ -16,11 +17,55 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+=======
+  const HomeScreen({
+    super.key,
+    this.isPreview = false,
+    this.initialTab = 0,
+    this.initialActivityOrder,
+  });
+
+  final bool isPreview;
+  final int initialTab;
+  final CargoActivityItem? initialActivityOrder;
+
+  @override
+  HomeScreenState createState() => HomeScreenState();
+}
+
+class HomeScreenState extends State<HomeScreen> {
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   final _pickupController = TextEditingController();
   final _destinationController = TextEditingController();
   int _selectedTab = 0;
 
   @override
+<<<<<<< HEAD
+=======
+  void initState() {
+    super.initState();
+    _selectedTab = widget.initialTab.clamp(0, _tabNames.length - 1);
+    _latestOrder = widget.initialActivityOrder;
+  }
+
+  void setTab(int index) {
+    final safeIndex = index.clamp(0, _tabNames.length - 1);
+    if (mounted && _selectedTab != safeIndex) {
+      setState(() => _selectedTab = safeIndex);
+    }
+  }
+
+  void showTrips({CargoActivityItem? order}) {
+    setTab(1);
+    if (order != null) {
+      setState(() { _latestOrder = order; });
+    }
+  }
+
+  CargoActivityItem? _latestOrder;
+
+  @override
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   void dispose() {
     _pickupController.dispose();
     _destinationController.dispose();
@@ -47,17 +92,31 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+<<<<<<< HEAD
   void _openActivity() {
     Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const YourActivityPage()));
+=======
+  void _handleTripsTap() {
+    setTab(1);
+  }
+
+  void _goToHome() {
+    setTab(0);
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   }
 
   @override
   Widget build(BuildContext context) {
+<<<<<<< HEAD
     return Scaffold(
       backgroundColor: AppColors.white,
       body: SafeArea(
+=======
+    final pages = <Widget>[
+      SafeArea(
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
           child: Column(
@@ -200,6 +259,24 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+<<<<<<< HEAD
+=======
+      YourActivityPage(
+        savedOrder: _latestOrder,
+        onDone: () => setTab(0),
+      ),
+      const _PlaceholderTab(label: 'Messages'),
+      const _PlaceholderTab(label: 'Wallet'),
+      const _PlaceholderTab(label: 'Profile'),
+    ];
+
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: IndexedStack(
+        index: _selectedTab,
+        children: pages,
+      ),
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
       bottomNavigationBar: SafeArea(
         top: false,
         child: BottomNavigationBar(
@@ -210,17 +287,33 @@ class _HomeScreenState extends State<HomeScreen> {
           selectedFontSize: 10,
           unselectedFontSize: 10,
           onTap: (index) {
+<<<<<<< HEAD
             setState(() => _selectedTab = index);
             if (index == 4 && widget.isPreview) {
+=======
+            if (index == 4 && widget.isPreview) {
+              setTab(index);
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
               Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
               );
               return;
             }
             if (index == 1) {
+<<<<<<< HEAD
               _openActivity();
               return;
             }
+=======
+              _handleTripsTap();
+              return;
+            }
+            if (index == 0) {
+              _goToHome();
+              return;
+            }
+            setTab(index);
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
             if (index != 0) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -259,6 +352,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
 const _tabNames = ['Home', 'Trips', 'Messages', 'Wallet', 'Profile'];
 
+<<<<<<< HEAD
+=======
+class _PlaceholderTab extends StatelessWidget {
+  const _PlaceholderTab({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Center(
+        child: Text(
+          '$label is not connected yet.',
+          style: const TextStyle(color: AppColors.darkGreen, fontSize: 16),
+        ),
+      ),
+    );
+  }
+}
+
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 class _LocationInput extends StatelessWidget {
   const _LocationInput({
     required this.controller,

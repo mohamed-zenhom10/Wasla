@@ -3,3 +3,7 @@ node_modules/
 .env.*
 !.env.example
 npm-debug.log*
+<<<<<<< HEAD
+=======
+uploads/
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a

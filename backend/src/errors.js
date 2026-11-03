@@ -9,8 +9,29 @@ export class AppError extends Error {
 
 const CONSTRAINT_ERRORS = {
   uq_users_email_ci: [409, 'EMAIL_TAKEN', 'This email is already registered'],
+<<<<<<< HEAD
 };
 
+=======
+  driver_profiles_national_id_hash_key: [409, 'NATIONAL_ID_TAKEN', 'This national ID is already registered',
+    { field: 'nationalId' }],
+  vehicles_plate_number_key: [409, 'PLATE_TAKEN', 'This plate number is already registered', { field: 'plateNumber' }],
+  ck_settings_topup_range: [400, 'INVALID_INPUT', 'minTopupAmount must not be more than maxTopupAmount',
+    { field: 'minTopupAmount' }],
+  ck_settings_offline_after_stale: [400, 'INVALID_INPUT',
+    'autoOfflineAfterSeconds must be more than locationStaleSeconds', { field: 'autoOfflineAfterSeconds' }],
+};
+
+function duplicateField(detail) {
+  const match = /^Key \(([^)]+)\)=/.exec(detail || '');
+  if (!match) {
+    return undefined;
+  }
+  const column = match[1].split(',').pop().trim();
+  return { field: column.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase()) };
+}
+
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 const DB_ERRORS = {
   23505: [409, 'ALREADY_EXISTS', 'This record already exists'],
   23503: [409, 'RELATED_RECORD', 'A related record is missing or still in use'],
@@ -36,9 +57,19 @@ export function toAppError(err) {
     return new AppError(413, 'TOO_LARGE', 'Request body is too large');
   }
 
+<<<<<<< HEAD
   const known = CONSTRAINT_ERRORS[err.constraint] || DB_ERRORS[err.code];
   if (known) {
     const appError = new AppError(...known);
+=======
+  const byConstraint = CONSTRAINT_ERRORS[err.constraint];
+  const known = byConstraint || DB_ERRORS[err.code];
+  if (known) {
+    const appError = new AppError(...known);
+    if (!byConstraint && err.code === '23505') {
+      appError.extra = duplicateField(err.detail);
+    }
+>>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
     appError.detail = err.message;
     return appError;
   }
