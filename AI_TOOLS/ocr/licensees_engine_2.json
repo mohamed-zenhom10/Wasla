@@ -1,0 +1,370 @@
+{
+  "ParsedResults": [
+    {
+      "TextOverlay": {
+        "Lines": [
+          {
+            "LineText": "ادارة مرور القاهرة",
+            "Words": [
+              {
+                "WordText": "ادارة",
+                "Left": 311,
+                "Top": 138,
+                "Height": 11,
+                "Width": 17
+              },
+              {
+                "WordText": "مرور",
+                "Left": 293,
+                "Top": 141,
+                "Height": 9,
+                "Width": 14
+              },
+              {
+                "WordText": "القاهرة",
+                "Left": 250,
+                "Top": 140,
+                "Height": 10,
+                "Width": 35
+              }
+            ],
+            "MaxHeight": 12,
+            "MinTop": 138
+          },
+          {
+            "LineText": "وحده مرور شيرا",
+            "Words": [
+              {
+                "WordText": "وحده",
+                "Left": 195,
+                "Top": 142,
+                "Height": 9,
+                "Width": 18
+              },
+              {
+                "WordText": "مرور",
+                "Left": 174,
+                "Top": 143,
+                "Height": 8,
+                "Width": 17
+              },
+              {
+                "WordText": "شيرا",
+                "Left": 151,
+                "Top": 142,
+                "Height": 10,
+                "Width": 20
+              }
+            ],
+            "MaxHeight": 10,
+            "MinTop": 142
+          },
+          {
+            "LineText": "رخصه قياده خاصه",
+            "Words": [
+              {
+                "WordText": "رخصه",
+                "Left": 300,
+                "Top": 155,
+                "Height": 11,
+                "Width": 30
+              },
+              {
+                "WordText": "قياده",
+                "Left": 278,
+                "Top": 156,
+                "Height": 11,
+                "Width": 18
+              },
+              {
+                "WordText": "خاصه",
+                "Left": 253,
+                "Top": 156,
+                "Height": 8,
+                "Width": 22
+              }
+            ],
+            "MaxHeight": 12,
+            "MinTop": 155
+          },
+          {
+            "LineText": "27705250105938",
+            "Words": [
+              {
+                "WordText": "27705250105938",
+                "Left": 136,
+                "Top": 160,
+                "Height": 8,
+                "Width": 95
+              }
+            ],
+            "MaxHeight": 8,
+            "MinTop": 160
+          },
+          {
+            "LineText": "حازم فاروق عبد السميع محمد",
+            "Words": [
+              {
+                "WordText": "حازم",
+                "Left": 313,
+                "Top": 174,
+                "Height": 11,
+                "Width": 20
+              },
+              {
+                "WordText": "فاروق",
+                "Left": 287,
+                "Top": 174,
+                "Height": 11,
+                "Width": 23
+              },
+              {
+                "WordText": "عبد",
+                "Left": 271,
+                "Top": 176,
+                "Height": 9,
+                "Width": 13
+              },
+              {
+                "WordText": "السميع",
+                "Left": 241,
+                "Top": 175,
+                "Height": 12,
+                "Width": 26
+              },
+              {
+                "WordText": "محمد",
+                "Left": 219,
+                "Top": 177,
+                "Height": 6,
+                "Width": 19
+              }
+            ],
+            "MaxHeight": 13,
+            "MinTop": 174
+          },
+          {
+            "LineText": "Hazem Farooq Abdul-samee Mohammed",
+            "Words": [
+              {
+                "WordText": "Hazem",
+                "Left": 133,
+                "Top": 193,
+                "Height": 6,
+                "Width": 28
+              },
+              {
+                "WordText": "Farooq",
+                "Left": 167,
+                "Top": 193,
+                "Height": 7,
+                "Width": 29
+              },
+              {
+                "WordText": "Abdul-samee",
+                "Left": 202,
+                "Top": 192,
+                "Height": 7,
+                "Width": 59
+              },
+              {
+                "WordText": "Mohammed",
+                "Left": 267,
+                "Top": 192,
+                "Height": 6,
+                "Width": 50
+              }
+            ],
+            "MaxHeight": 8,
+            "MinTop": 192
+          },
+          {
+            "LineText": "٢٣ ش عبد العال عبد المجيد الشرابية ٢٣٧٧٩٧",
+            "Words": [
+              {
+                "WordText": "٢٣",
+                "Left": 323,
+                "Top": 207,
+                "Height": 6,
+                "Width": 9
+              },
+              {
+                "WordText": "ش",
+                "Left": 311,
+                "Top": 208,
+                "Height": 10,
+                "Width": 9
+              },
+              {
+                "WordText": "عبد",
+                "Left": 294,
+                "Top": 209,
+                "Height": 8,
+                "Width": 14
+              },
+              {
+                "WordText": "العال",
+                "Left": 272,
+                "Top": 208,
+                "Height": 11,
+                "Width": 19
+              },
+              {
+                "WordText": "عبد",
+                "Left": 255,
+                "Top": 210,
+                "Height": 8,
+                "Width": 13
+              },
+              {
+                "WordText": "المجيد",
+                "Left": 231,
+                "Top": 208,
+                "Height": 10,
+                "Width": 21
+              },
+              {
+                "WordText": "الشرابية",
+                "Left": 195,
+                "Top": 208,
+                "Height": 10,
+                "Width": 32
+              },
+              {
+                "WordText": "٢٣٧٧٩٧",
+                "Left": 156,
+                "Top": 208,
+                "Height": 7,
+                "Width": 35
+              }
+            ],
+            "MaxHeight": 12,
+            "MinTop": 207
+          },
+          {
+            "LineText": "اتمزى Egyptian تريخ تدرم ١٢-١١-٢٠٢٣",
+            "Words": [
+              {
+                "WordText": "اتمزى",
+                "Left": 308,
+                "Top": 225,
+                "Height": 8,
+                "Width": 24
+              },
+              {
+                "WordText": "Egyptian",
+                "Left": 246,
+                "Top": 225,
+                "Height": 8,
+                "Width": 41
+              },
+              {
+                "WordText": "تريخ",
+                "Left": 217,
+                "Top": 226,
+                "Height": 8,
+                "Width": 12
+              },
+              {
+                "WordText": "تدرم",
+                "Left": 197,
+                "Top": 226,
+                "Height": 7,
+                "Width": 16
+              },
+              {
+                "WordText": "١٢-١١-٢٠٢٣",
+                "Left": 147,
+                "Top": 225,
+                "Height": 7,
+                "Width": 42
+              }
+            ],
+            "MaxHeight": 9,
+            "MinTop": 225
+          },
+          {
+            "LineText": "حاصل على ديلوم",
+            "Words": [
+              {
+                "WordText": "حاصل",
+                "Left": 310,
+                "Top": 240,
+                "Height": 10,
+                "Width": 24
+              },
+              {
+                "WordText": "على",
+                "Left": 290,
+                "Top": 240,
+                "Height": 11,
+                "Width": 17
+              },
+              {
+                "WordText": "ديلوم",
+                "Left": 267,
+                "Top": 240,
+                "Height": 11,
+                "Width": 20
+              }
+            ],
+            "MaxHeight": 11,
+            "MinTop": 240
+          },
+          {
+            "LineText": "نقاية المرخيض ١١-٢٠٢٣٠١١",
+            "Words": [
+              {
+                "WordText": "نقاية",
+                "Left": 223,
+                "Top": 242,
+                "Height": 7,
+                "Width": 13
+              },
+              {
+                "WordText": "المرخيض",
+                "Left": 197,
+                "Top": 242,
+                "Height": 7,
+                "Width": 23
+              },
+              {
+                "WordText": "١١-٢٠٢٣٠١١",
+                "Left": 144,
+                "Top": 241,
+                "Height": 6,
+                "Width": 42
+              }
+            ],
+            "MaxHeight": 8,
+            "MinTop": 241
+          },
+          {
+            "LineText": "B",
+            "Words": [
+              {
+                "WordText": "B",
+                "Left": 46,
+                "Top": 265,
+                "Height": 10,
+                "Width": 7
+              }
+            ],
+            "MaxHeight": 10,
+            "MinTop": 265
+          }
+        ],
+        "HasOverlay": true
+      },
+      "TextOrientation": "0",
+      "FileParseExitCode": 1,
+      "ParsedText": "ادارة مرور القاهرة\nوحده مرور شيرا\nرخصه قياده خاصه\n27705250105938\nحازم فاروق عبد السميع محمد\nHazem Farooq Abdul-samee Mohammed\n٢٣ ش عبد العال عبد المجيد الشرابية ٢٣٧٧٩٧\nاتمزى Egyptian تريخ تدرم ١٢-١١-٢٠٢٣\nحاصل على ديلوم\nنقاية المرخيض ١١-٢٠٢٣٠١١\nB",
+      "ErrorMessage": "",
+      "ErrorDetails": ""
+    }
+  ],
+  "OCRExitCode": 1,
+  "IsErroredOnProcessing": false,
+  "ProcessingTimeInMilliseconds": "925",
+  "SearchablePDFURL": "Searchable PDF not generated as it was not requested."
+}

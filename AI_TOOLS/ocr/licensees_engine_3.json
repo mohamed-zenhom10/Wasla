@@ -1,0 +1,175 @@
+{
+  "ParsedResults": [
+    {
+      "TextOverlay": {
+        "Lines": [
+          {
+            "LineText": "ادارة مرور القاهرة",
+            "Words": [
+              {
+                "WordText": "ادارة مرور القاهرة",
+                "Left": 264,
+                "Top": 124,
+                "Height": 24,
+                "Width": 67
+              }
+            ],
+            "MaxHeight": 24,
+            "MinTop": 124
+          },
+          {
+            "LineText": "رخصه قياده خاصه",
+            "Words": [
+              {
+                "WordText": "رخصه قياده خاصه",
+                "Left": 252,
+                "Top": 151,
+                "Height": 17,
+                "Width": 79
+              }
+            ],
+            "MaxHeight": 17,
+            "MinTop": 151
+          },
+          {
+            "LineText": "وحدة مرور شبرا",
+            "Words": [
+              {
+                "WordText": "وحدة مرور شبرا",
+                "Left": 150,
+                "Top": 138,
+                "Height": 13,
+                "Width": 63
+              }
+            ],
+            "MaxHeight": 13,
+            "MinTop": 138
+          },
+          {
+            "LineText": "27705250105938",
+            "Words": [
+              {
+                "WordText": "27705250105938",
+                "Left": 134,
+                "Top": 158,
+                "Height": 11,
+                "Width": 96
+              }
+            ],
+            "MaxHeight": 11,
+            "MinTop": 158
+          },
+          {
+            "LineText": "حازم فاروق عبد السميع محمد",
+            "Words": [
+              {
+                "WordText": "حازم فاروق عبد السميع محمد",
+                "Left": 217,
+                "Top": 173,
+                "Height": 13,
+                "Width": 114
+              }
+            ],
+            "MaxHeight": 13,
+            "MinTop": 173
+          },
+          {
+            "LineText": "Hazem Farooq Abdul-samee' Mohammed",
+            "Words": [
+              {
+                "WordText": "Hazem Farooq Abdul-samee' Mohammed",
+                "Left": 132,
+                "Top": 188,
+                "Height": 12,
+                "Width": 199
+              }
+            ],
+            "MaxHeight": 12,
+            "MinTop": 188
+          },
+          {
+            "LineText": "٢٣ ش عبد العال عبد المجيد الشرابية ٢٣٧٧٧٩٧",
+            "Words": [
+              {
+                "WordText": "٢٣ ش عبد العال عبد المجيد الشرابية ٢٣٧٧٧٩٧",
+                "Left": 146,
+                "Top": 203,
+                "Height": 14,
+                "Width": 185
+              }
+            ],
+            "MaxHeight": 14,
+            "MinTop": 203
+          },
+          {
+            "LineText": "مصري Egyptian",
+            "Words": [
+              {
+                "WordText": "مصري Egyptian",
+                "Left": 244,
+                "Top": 221,
+                "Height": 12,
+                "Width": 86
+              }
+            ],
+            "MaxHeight": 12,
+            "MinTop": 221
+          },
+          {
+            "LineText": "تاريخ التحرير ۱۲-۱۱-۲۰۲۳",
+            "Words": [
+              {
+                "WordText": "تاريخ التحرير ۱۲-۱۱-۲۰۲۳",
+                "Left": 146,
+                "Top": 221,
+                "Height": 12,
+                "Width": 82
+              }
+            ],
+            "MaxHeight": 12,
+            "MinTop": 221
+          },
+          {
+            "LineText": "حاصل على دبلوم",
+            "Words": [
+              {
+                "WordText": "حاصل على دبلوم",
+                "Left": 270,
+                "Top": 237,
+                "Height": 12,
+                "Width": 61
+              }
+            ],
+            "MaxHeight": 12,
+            "MinTop": 237
+          },
+          {
+            "LineText": "تاريخ الترخيص ۱۱-۱۱-۲۰۲۳",
+            "Words": [
+              {
+                "WordText": "تاريخ الترخيص ۱۱-۱۱-۲۰۲۳",
+                "Left": 142,
+                "Top": 237,
+                "Height": 12,
+                "Width": 92
+              }
+            ],
+            "MaxHeight": 12,
+            "MinTop": 237
+          }
+        ],
+        "HasOverlay": true,
+        "Message": "Total lines: 11"
+      },
+      "TextOrientation": "0",
+      "FileParseExitCode": 1,
+      "ParsedText": "ادارة مرور القاهرة\nرخصه قياده خاصه\nوحدة مرور شبرا\n27705250105938\nحازم فاروق عبد السميع محمد\nHazem Farooq Abdul-samee' Mohammed\n٢٣ ش عبد العال عبد المجيد الشرابية ٢٣٧٧٧٩٧\nمصري Egyptian\nتاريخ التحرير ۱۲-۱۱-۲۰۲۳\nحاصل على دبلوم\nتاريخ الترخيص ۱۱-۱۱-۲۰۲۳",
+      "ErrorMessage": "",
+      "ErrorDetails": ""
+    }
+  ],
+  "OCRExitCode": 1,
+  "IsErroredOnProcessing": false,
+  "ProcessingTimeInMilliseconds": "2320",
+  "SearchablePDFURL": ""
+}
