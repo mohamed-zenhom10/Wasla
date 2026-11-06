@@ -1,5 +1,5 @@
 import 'package:driver/components/driver_components.dart';
-import 'package:driver/screens/driver_application_screen.dart';
+import 'package:driver/screens/driver_auth_screen.dart';
 import 'package:driver/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
@@ -80,7 +80,7 @@ class DriverWelcomeScreen extends StatelessWidget {
                   label: 'Become a driver',
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => const DriverApplicationScreen(),
+                      builder: (_) => const DriverAuthScreen(),
                     ),
                   ),
                 ),
