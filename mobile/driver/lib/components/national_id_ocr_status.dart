@@ -44,7 +44,9 @@ class NationalIdOcrStatus extends StatelessWidget {
     if (recognizedId == null) {
       return const Padding(
         padding: EdgeInsets.only(top: 12),
-        child: Text('ارفع صورة الوجه الأمامي للبطاقة للتحقق من الرقم القومي.'),
+        child: Text(
+          'يمكنك كتابة الرقم يدويًا أو تصوير الوجه الأمامي للبطاقة وسيتم ملؤه تلقائيًا.',
+        ),
       );
     }
 
@@ -69,9 +71,9 @@ class NationalIdOcrStatus extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             enteredId.trim().isEmpty
-                ? 'اكتب الرقم يدويًا للمقارنة.'
+                ? 'يمكنك استخدام الرقم المستخرج أو كتابته يدويًا.'
                 : matches
-                ? 'الرقم المكتوب مطابق للصورة.'
+                ? 'تم ملء الرقم تلقائيًا. راجعه قبل المتابعة.'
                 : 'الرقم المكتوب لا يطابق الصورة. صححه قبل المتابعة.',
             style: TextStyle(
               color: matches ? Colors.green.shade700 : Colors.red.shade700,

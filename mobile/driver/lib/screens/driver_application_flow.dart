@@ -217,10 +217,11 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   }
 
   Future<void> _pickAndUpload(String type) async {
-    final picked = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 70,
-    );
+    final source = type == 'national_id_front'
+        ? await _chooseNationalIdImageSource()
+        : ImageSource.gallery;
+    if (source == null) return;
+    final picked = await _picker.pickImage(source: source, imageQuality: 70);
     if (picked == null || !mounted) return;
     if (type == 'national_id_front') {
       setState(() {
@@ -235,15 +236,14 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
           filename: picked.name,
         );
         if (!mounted) return;
+        _nationalId.value = TextEditingValue(
+          text: recognizedId,
+          selection: TextSelection.collapsed(offset: recognizedId.length),
+        );
         setState(() {
           _recognizedNationalId = recognizedId;
           _isReadingNationalId = false;
         });
-        if (!NationalIdOcrService.matches(_nationalId.text, recognizedId)) {
-          _showMessage(
-            'الرقم المكتوب لا يطابق الرقم المستخرج من صورة البطاقة.',
-          );
-        }
       } catch (error) {
         if (!mounted) return;
         final message = error is NationalIdOcrException
@@ -352,6 +352,28 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<ImageSource?> _chooseNationalIdImageSource() {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('تصوير الوجه الأمامي للبطاقة'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('اختيار صورة من المعرض'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _messageFor(Object error) {
@@ -789,6 +811,7 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         label: 'National ID number',
         controller: _nationalId,
         icon: Icons.badge_outlined,
+        hintText: 'اكتب الرقم أو صوّر الوجه الأمامي للبطاقة',
         keyboardType: TextInputType.number,
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r'[0-9٠-٩۰-۹]')),
