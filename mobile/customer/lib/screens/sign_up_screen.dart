@@ -54,6 +54,28 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
+  String _normalizePhoneNumber(String value) {
+    return value.trim().replaceAll(RegExp(r'[\s\-]+'), '');
+  }
+
+  bool _isValidInternationalPhone(String value) {
+    final normalized = _normalizePhoneNumber(value);
+
+    if (normalized.isEmpty || !normalized.startsWith('+')) {
+      return false;
+    }
+
+    if (!RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(normalized)) {
+      return false;
+    }
+
+    if (normalized.startsWith('+20') && normalized.length > 3 && normalized[3] == '0') {
+      return false;
+    }
+
+    return true;
+  }
+
   Future<void> _continue() async {
 >>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
     if (!_acceptedTerms || !_formKey.currentState!.validate()) {
@@ -75,10 +97,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     setState(() => _isSubmitting = true);
 
+    final normalizedPhone = _normalizePhoneNumber(_phoneController.text);
     final result = await AuthService.register(
       fullName: _nameController.text.trim(),
       email: _emailController.text.trim(),
-      phone: _phoneController.text.trim(),
+      phone: normalizedPhone,
       password: _passwordController.text,
     );
 
@@ -101,7 +124,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       MaterialPageRoute<void>(
         builder: (_) => OtpScreen(
           email: _emailController.text.trim(),
-          phoneNumber: '+20 ${_phoneController.text.trim()}',
+          phoneNumber: normalizedPhone,
         ),
 >>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
       ),
@@ -142,14 +165,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
               keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.next,
               inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')),
-                LengthLimitingTextInputFormatter(12),
+                FilteringTextInputFormatter.allow(RegExp(r'[+0-9\s-]')),
               ],
               validator: (value) {
-                final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
-                return digits.length == 10 && digits.startsWith('1')
-                    ? null
-                    : 'Enter a valid 10-digit Egyptian mobile number';
+                final normalized = (value ?? '').trim();
+                if (normalized.isEmpty) {
+                  return 'Enter a valid international phone number including the country code';
+                }
+
+                if (!_isValidInternationalPhone(normalized)) {
+                  return 'Enter a valid international phone number including the country code';
+                }
+
+                return null;
               },
             ),
             const SizedBox(height: 18),

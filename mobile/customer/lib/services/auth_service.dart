@@ -76,6 +76,8 @@ class AuthService {
         'phone': phone.trim(),
         'phoneNumber': phone.trim(),
         'password': password,
+        'role': 'customer',
+        'acceptPolicies': true,
       },
       successMessage: 'Account created successfully.',
       onSuccess: (payload) => _sessionFromPayload(payload),
