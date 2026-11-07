@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:driver/components/driver_components.dart';
+import 'package:driver/components/national_id_ocr_status.dart';
 import 'package:driver/data/driver_api.dart';
 import 'package:driver/data/driver_application.dart';
+import 'package:driver/data/national_id_ocr.dart';
 import 'package:driver/screens/driver_auth_screen.dart';
 import 'package:driver/screens/driver_verification_screen.dart';
 import 'package:driver/theme/app_theme.dart';
@@ -22,6 +24,7 @@ class DriverApplicationFlow extends StatefulWidget {
 class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   final _api = DriverApi();
   final _picker = ImagePicker();
+  final _nationalIdOcr = NationalIdOcrService();
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -52,6 +55,9 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   bool _confirm = false;
   bool _needsPolicyAcceptance = false;
   bool _policyChecked = false;
+  bool _isReadingNationalId = false;
+  String? _recognizedNationalId;
+  String? _nationalIdOcrError;
   List<Map<String, dynamic>> _policies = const [];
   Timer? _refreshTimer;
   String? _loadError;
@@ -82,6 +88,7 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   @override
   void initState() {
     super.initState();
+    _nationalId.addListener(_onNationalIdChanged);
     _step = widget.initialStep.clamp(0, 6);
     _load();
     _refreshTimer = Timer.periodic(
@@ -94,6 +101,8 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   void dispose() {
     _refreshTimer?.cancel();
     _api.close();
+    _nationalIdOcr.close();
+    _nationalId.removeListener(_onNationalIdChanged);
     _nameController.dispose();
     _phoneController.dispose();
     _birthDate.dispose();
@@ -107,6 +116,10 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
     _bank.dispose();
     _accountNumber.dispose();
     super.dispose();
+  }
+
+  void _onNationalIdChanged() {
+    if (mounted && _recognizedNationalId != null) setState(() {});
   }
 
   Future<void> _load({bool showSpinner = true}) async {
@@ -209,6 +222,43 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
       imageQuality: 70,
     );
     if (picked == null || !mounted) return;
+    if (type == 'national_id_front') {
+      setState(() {
+        _pendingUploads[type] = picked;
+        _isReadingNationalId = true;
+        _recognizedNationalId = null;
+        _nationalIdOcrError = null;
+      });
+      try {
+        final recognizedId = await _nationalIdOcr.readNationalId(
+          imageBytes: await _readBytes(picked),
+          filename: picked.name,
+        );
+        if (!mounted) return;
+        setState(() {
+          _recognizedNationalId = recognizedId;
+          _isReadingNationalId = false;
+        });
+        if (!NationalIdOcrService.matches(_nationalId.text, recognizedId)) {
+          _showMessage(
+            'الرقم المكتوب لا يطابق الرقم المستخرج من صورة البطاقة.',
+          );
+        }
+      } catch (error) {
+        if (!mounted) return;
+        final message = error is NationalIdOcrException
+            ? error.message
+            : error is StateError
+            ? error.message
+            : 'تعذر قراءة الرقم القومي. تحقق من الاتصال وحاول مرة أخرى.';
+        setState(() {
+          _isReadingNationalId = false;
+          _nationalIdOcrError = message;
+        });
+        _showMessage(message);
+      }
+      return;
+    }
     final hasSavedNationalId = _application?.profile['nationalIdLast4'] != null;
     if (!hasSavedNationalId &&
         [
@@ -746,10 +796,35 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         validator: (value) {
           final nationalId = _latinDigits(value ?? '');
           final alreadySaved = _application!.profile['nationalIdLast4'] != null;
-          return nationalId.length == 14 || (nationalId.isEmpty && alreadySaved)
-              ? null
-              : 'الرقم القومي يجب أن يتكون من 14 رقمًا.';
+          final hasNewFrontImage = _pendingUploads.containsKey(
+            'national_id_front',
+          );
+          if (nationalId.length != 14 &&
+              !(nationalId.isEmpty && alreadySaved && !hasNewFrontImage)) {
+            return 'الرقم القومي يجب أن يتكون من 14 رقمًا.';
+          }
+          if (hasNewFrontImage) {
+            if (_isReadingNationalId) return 'انتظر حتى تنتهي قراءة الصورة.';
+            if (_nationalIdOcrError != null) return _nationalIdOcrError;
+            if (_recognizedNationalId == null) {
+              return 'ارفع صورة واضحة للوجه الأمامي للبطاقة.';
+            }
+            if (!NationalIdOcrService.matches(
+              nationalId,
+              _recognizedNationalId!,
+            )) {
+              return 'الرقم المكتوب لا يطابق الرقم الموجود في الصورة.';
+            }
+          }
+          return null;
         },
+      ),
+      const SizedBox(height: 18),
+      NationalIdOcrStatus(
+        isReading: _isReadingNationalId,
+        recognizedId: _recognizedNationalId,
+        enteredId: _nationalId.text,
+        error: _nationalIdOcrError,
       ),
       const SizedBox(height: 18),
       _photoButton('national_id_front'),
