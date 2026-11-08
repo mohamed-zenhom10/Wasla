@@ -10,6 +10,7 @@ import catalogRouter from './routes/catalog.js';
 import adminRouter from './routes/admin/index.js';
 import driverRouter from './routes/driver.js';
 import filesRouter from './routes/files.js';
+import shipmentsRouter from './routes/shipments.js';
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use('/api/catalog', catalogRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/driver', driverRouter);
 app.use('/api/files', filesRouter);
+app.use('/api/shipments', shipmentsRouter);
 
 app.use((req, res, next) => {
   next(new AppError(404, 'NOT_FOUND', 'Route not found'));

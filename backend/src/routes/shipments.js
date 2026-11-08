@@ -1,0 +1,124 @@
+import express, { Router } from 'express';
+import { query, withTransaction } from '../db.js';
+import { AppError } from '../errors.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
+import { bodyOf, readFields } from '../lib/fields.js';
+import { cleanId, cleanChoice, cleanInteger } from '../lib/validate.js';
+import {
+  IMAGE_TYPES, MAX_IMAGE_MB, readImage, saveImage,
+} from '../lib/storage.js';
+import {
+  shipmentFields, stateOf, buildColumns, insertShipment, updateShipment, loadShipment, lockShipment,
+  requireDraft, toShipmentSummary, SUMMARY_SQL, STATUS_FILTERS,
+} from '../lib/shipments.js';
+
+const router = Router();
+const PAGE_SIZE = 20;
+const MAX_PHOTOS = 10;
+const imageBody = express.raw({ type: IMAGE_TYPES, limit: `${MAX_IMAGE_MB}mb` });
+
+router.use(requireAuth, requireRole('customer'));
+
+function actorOf(req, reason) {
+  return { id: req.user.id, role: 'customer', reason };
+}
+
+function baseUrl(req) {
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+async function reply(req, res, id, status = 200) {
+  res.status(status).json({ shipment: await loadShipment(id, baseUrl(req)) });
+}
+
+router.get('/', async (req, res) => {
+  const status = req.query.status === undefined ? null
+    : cleanChoice(req.query.status, 'status', Object.keys(STATUS_FILTERS));
+  const page = req.query.page === undefined ? 1 : cleanInteger(Number(req.query.page), 'page', 1, 100000);
+  const { rows } = await query(
+    `${SUMMARY_SQL}
+     WHERE s.customer_id = $1 AND ($2::text IS NULL OR s.status = ANY(string_to_array($2, ',')))
+     ORDER BY s.created_at DESC, s.id DESC
+     LIMIT ${PAGE_SIZE + 1} OFFSET $3`,
+    [req.user.id, status ? STATUS_FILTERS[status].join(',') : null, (page - 1) * PAGE_SIZE],
+  );
+  res.json({
+    shipments: rows.slice(0, PAGE_SIZE).map(toShipmentSummary),
+    page,
+    hasMore: rows.length > PAGE_SIZE,
+  });
+});
+
+router.post('/', async (req, res) => {
+  const body = bodyOf(req);
+  const state = readFields(body, shipmentFields, 'create');
+  const id = await withTransaction(actorOf(req), async (client) => {
+    const columns = await buildColumns(client, state, Object.keys(body));
+    return insertShipment(client, req.user.id, columns);
+  });
+  await reply(req, res, id, 201);
+});
+
+router.get('/:id', async (req, res) => {
+  const id = cleanId(req.params.id);
+  const { rows: [own] } = await query('SELECT 1 FROM shipments WHERE id = $1 AND customer_id = $2', [id, req.user.id]);
+  if (!own) {
+    throw new AppError(404, 'NOT_FOUND', 'Shipment not found');
+  }
+  await reply(req, res, id);
+});
+
+router.patch('/:id', async (req, res) => {
+  const id = cleanId(req.params.id);
+  const body = bodyOf(req);
+  const changes = readFields(body, shipmentFields, 'update');
+  await withTransaction(actorOf(req), async (client) => {
+    const row = await lockShipment(client, id, req.user.id);
+    requireDraft(row);
+    const columns = await buildColumns(client, { ...stateOf(row), ...changes }, Object.keys(body));
+    await updateShipment(client, id, columns);
+  });
+  await reply(req, res, id);
+});
+
+router.put('/:id/photos', imageBody, async (req, res) => {
+  const id = cleanId(req.params.id);
+  const image = readImage(req);
+  const check = async (client) => {
+    const row = await lockShipment(client, id, req.user.id);
+    requireDraft(row);
+    const { rows: [count] } = await client.query(
+      'SELECT count(*)::int AS n FROM shipment_item_images WHERE shipment_id = $1',
+      [id],
+    );
+    if (count.n >= MAX_PHOTOS) {
+      throw new AppError(409, 'TOO_MANY_PHOTOS', `A shipment can have at most ${MAX_PHOTOS} photos`);
+    }
+  };
+  await withTransaction(null, check);
+  const key = await saveImage(image, `wasla/shipments/${id}`);
+  await withTransaction(actorOf(req), async (client) => {
+    await check(client);
+    await client.query('INSERT INTO shipment_item_images (shipment_id, storage_key) VALUES ($1, $2)', [id, key]);
+  });
+  await reply(req, res, id, 201);
+});
+
+router.delete('/:id/photos/:photoId', async (req, res) => {
+  const id = cleanId(req.params.id);
+  const photoId = cleanId(req.params.photoId);
+  await withTransaction(actorOf(req), async (client) => {
+    const row = await lockShipment(client, id, req.user.id);
+    requireDraft(row);
+    const { rowCount } = await client.query(
+      'DELETE FROM shipment_item_images WHERE id = $1 AND shipment_id = $2 RETURNING id',
+      [photoId, id],
+    );
+    if (rowCount === 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Photo not found');
+    }
+  });
+  await reply(req, res, id);
+});
+
+export default router;

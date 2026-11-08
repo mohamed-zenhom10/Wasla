@@ -34,10 +34,10 @@ export function cleanName(value) {
   return name;
 }
 
-export function cleanPhone(value) {
+export function cleanPhone(value, field = 'phone') {
   const phone = typeof value === 'string' ? value.replace(/[\s-]/g, '') : '';
   if (!PHONE_PATTERN.test(phone)) {
-    throw invalid('phone', 'Phone must be in international format, like +201001234567');
+    throw invalid(field, `${field} must be in international format, like +201001234567`);
   }
   return phone;
 }
