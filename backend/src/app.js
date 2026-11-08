@@ -6,13 +6,10 @@ import healthRouter from './routes/health.js';
 import authRouter from './routes/auth.js';
 import meRouter from './routes/me.js';
 import policiesRouter from './routes/policies.js';
-<<<<<<< HEAD
-=======
 import catalogRouter from './routes/catalog.js';
 import adminRouter from './routes/admin/index.js';
 import driverRouter from './routes/driver.js';
 import filesRouter from './routes/files.js';
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 
 const app = express();
 
@@ -27,13 +24,10 @@ app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/me', meRouter);
 app.use('/api/policies', policiesRouter);
-<<<<<<< HEAD
-=======
 app.use('/api/catalog', catalogRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/driver', driverRouter);
 app.use('/api/files', filesRouter);
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 
 app.use((req, res, next) => {
   next(new AppError(404, 'NOT_FOUND', 'Route not found'));

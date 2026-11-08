@@ -4,11 +4,7 @@ const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const PHONE_PATTERN = /^\+[1-9][0-9]{7,14}$/;
 const CODE_PATTERN = /^[0-9]{6}$/;
 
-<<<<<<< HEAD
-function invalid(field, message) {
-=======
 export function invalid(field, message) {
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   return new AppError(400, 'INVALID_INPUT', message, { field });
 }
 
@@ -60,8 +56,6 @@ export function cleanToken(value) {
   }
   return value;
 }
-<<<<<<< HEAD
-=======
 
 const SLUG_PATTERN = /^[a-z][a-z0-9_]{1,39}$/;
 const DECIMAL_PATTERN = /^[0-9]+(\.[0-9]+)?$/;
@@ -181,4 +175,3 @@ export function cleanBoundary(value, field = 'boundary') {
   }
   return JSON.stringify({ type: 'Polygon', coordinates: [points] });
 }
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a

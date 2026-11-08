@@ -74,8 +74,6 @@ export async function sendCode(email, purpose, code, language = 'ar') {
     throw new AppError(503, 'EMAIL_FAILED', 'Could not send the email, try again');
   }
 }
-<<<<<<< HEAD
-=======
 
 const DOCUMENT_NAMES = {
   profile_photo: ['الصورة الشخصية', 'profile photo'],
@@ -168,4 +166,3 @@ export async function sendNotice(email, language, kind, params = {}) {
     console.error(`Notice email failed (${kind}):`, err.message);
   }
 }
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a

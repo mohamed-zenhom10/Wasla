@@ -165,8 +165,6 @@ Returns the latest terms and privacy policy:
 { "policies": [ { "type": "terms", "version": 1, "contentAr": "...", "contentEn": "...", "publishedAt": "..." } ] }
 ```
 
-<<<<<<< HEAD
-=======
 ## Catalog
 
 ### GET /catalog
@@ -461,7 +459,6 @@ A draft is not shown to anyone. After publishing, the text cannot change (make a
 
 Errors: `DRAFT_EXISTS` (only one draft per type, the error has its `id`), `ALREADY_PUBLISHED`
 
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 ## Too many tries
 
 Some endpoints have a limit. When it is reached they return `429` with `TOO_MANY_REQUESTS` and `retryAfter` in seconds.
