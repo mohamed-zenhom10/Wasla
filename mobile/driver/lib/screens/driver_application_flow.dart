@@ -27,6 +27,7 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   final _nationalIdOcr = NationalIdOcrService();
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _birthDate = TextEditingController();
   final _nationalId = TextEditingController();
@@ -39,6 +40,7 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   final _bank = TextEditingController();
   final _accountNumber = TextEditingController();
   final Map<String, XFile> _pendingUploads = {};
+  final Map<String, Future<Uint8List>> _pendingPreviewBytes = {};
   DriverApplication? _application;
   Map<String, dynamic> _catalog = const {};
   String? _cityId;
@@ -46,7 +48,16 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   String _licenseCategory = 'professional_3';
   String _payoutMethod = 'bank_account';
   String _fullName = '';
+  String _email = '';
   String _phone = '';
+  String? _nationalIdName;
+  String? _drivingLicenseName;
+  String? _birthGovernorate;
+  String? _drivingLicenseExpiry;
+  String? _vehicleLicenseExpiry;
+  final Map<String, String> _documentOcrIssues = {};
+  final Set<String> _ocrValidatedDocuments = {};
+  bool _identityNameMismatch = false;
   String? _userId;
   int _maxHelpers = 0;
   int _step = 0;
@@ -56,17 +67,17 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   bool _needsPolicyAcceptance = false;
   bool _policyChecked = false;
   bool _isReadingNationalId = false;
+  bool _isReadingDocument = false;
   String? _recognizedNationalId;
   String? _nationalIdOcrError;
+  String? _documentOcrError;
   List<Map<String, dynamic>> _policies = const [];
   Timer? _refreshTimer;
   String? _loadError;
 
   static const _titles = [
-    'Let’s meet you',
-    'Verify your identity',
-    'Your driving license',
-    'Register your truck',
+    'Let’s meet you · documents',
+    'Your information',
     'Show your vehicle',
     'Where should we pay you?',
     'Ready for verification?',
@@ -84,12 +95,27 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
     'vehicle_photo_rear': 'Rear with plate',
     'vehicle_photo_cargo': 'Cargo area',
   };
+  static const _firstPageDocumentTypes = <String>[
+    'profile_photo',
+    'national_id_front',
+    'national_id_back',
+    'driving_license_front',
+    'driving_license_back',
+    'vehicle_license_front',
+    'vehicle_license_back',
+  ];
+  static const _ocrRequiredDocumentTypes = <String>[
+    'national_id_front',
+    'driving_license_front',
+    'vehicle_license_front',
+    'vehicle_license_back',
+  ];
 
   @override
   void initState() {
     super.initState();
     _nationalId.addListener(_onNationalIdChanged);
-    _step = widget.initialStep.clamp(0, 6);
+    _step = widget.initialStep.clamp(0, 4);
     _load();
     _refreshTimer = Timer.periodic(
       const Duration(minutes: 55),
@@ -104,6 +130,7 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
     _nationalIdOcr.close();
     _nationalId.removeListener(_onNationalIdChanged);
     _nameController.dispose();
+    _emailController.dispose();
     _phoneController.dispose();
     _birthDate.dispose();
     _nationalId.dispose();
@@ -149,9 +176,11 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         _application = application;
         _catalog = catalog;
         _fullName = user['fullName'] as String? ?? '';
+        _email = user['email'] as String? ?? '';
         _phone = user['phone'] as String? ?? '';
         _userId = user['id']?.toString();
         _nameController.text = _fullName;
+        _emailController.text = _email;
         _phoneController.text = _phone;
         _cityId = application.profile['cityId']?.toString();
         _birthDate.text = application.profile['dateOfBirth'] as String? ?? '';
@@ -217,61 +246,47 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   }
 
   Future<void> _pickAndUpload(String type) async {
-    final source = type == 'national_id_front'
-        ? await _chooseNationalIdImageSource()
+    final source = _firstPageDocumentTypes.contains(type)
+        ? await _chooseDocumentImageSource(type)
         : ImageSource.gallery;
     if (source == null) return;
     final picked = await _picker.pickImage(source: source, imageQuality: 70);
     if (picked == null || !mounted) return;
-    if (type == 'national_id_front') {
+    if (_firstPageDocumentTypes.contains(type)) {
       setState(() {
         _pendingUploads[type] = picked;
-        _isReadingNationalId = true;
-        _recognizedNationalId = null;
-        _nationalIdOcrError = null;
+        _pendingPreviewBytes[type] = picked.readAsBytes();
+        _documentOcrIssues.remove(type);
+        if (_ocrRequiredDocumentTypes.contains(type)) {
+          _ocrValidatedDocuments.remove(type);
+          if (type == 'national_id_front') {
+            _isReadingNationalId = true;
+            _recognizedNationalId = null;
+            _nationalId.clear();
+            _nationalIdOcrError = null;
+            _nationalIdName = null;
+            _birthDate.clear();
+            _birthGovernorate = null;
+          } else {
+            _isReadingDocument = true;
+            _documentOcrError = null;
+            if (type == 'driving_license_front') {
+              _drivingLicenseName = null;
+              _nameController.text = _fullName;
+              _drivingLicenseExpiry = null;
+            } else if (type == 'vehicle_license_front') {
+              _vehicleLicenseExpiry = null;
+            }
+          }
+          _identityNameMismatch = false;
+        }
       });
-      try {
-        final recognizedId = await _nationalIdOcr.readNationalId(
-          imageBytes: await _readBytes(picked),
-          filename: picked.name,
-        );
-        if (!mounted) return;
-        _nationalId.value = TextEditingValue(
-          text: recognizedId,
-          selection: TextSelection.collapsed(offset: recognizedId.length),
-        );
-        setState(() {
-          _recognizedNationalId = recognizedId;
-          _isReadingNationalId = false;
-        });
-      } catch (error) {
-        if (!mounted) return;
-        final message = error is NationalIdOcrException
-            ? error.message
-            : error is StateError
-            ? error.message
-            : 'تعذر قراءة الرقم القومي. تحقق من الاتصال وحاول مرة أخرى.';
-        setState(() {
-          _isReadingNationalId = false;
-          _nationalIdOcrError = message;
-        });
-        _showMessage(message);
+      if (_ocrRequiredDocumentTypes.contains(type)) {
+        await _analyzeDocument(type, picked);
       }
       return;
     }
-    final hasSavedNationalId = _application?.profile['nationalIdLast4'] != null;
-    if (!hasSavedNationalId &&
-        [
-          'profile_photo',
-          'national_id_front',
-          'national_id_back',
-        ].contains(type)) {
-      setState(() => _pendingUploads[type] = picked);
-      return;
-    }
-    if (type == 'vehicle_license_front' ||
-        type == 'vehicle_license_back' ||
-        type.startsWith('vehicle_photo_')) {
+    if (type.startsWith('vehicle_photo_')) {
       final vehicle = _application?.activeVehicle;
       if (vehicle == null) {
         if (!_formKey.currentState!.validate()) return;
@@ -303,6 +318,125 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         contentType: _contentType(picked.name),
       );
     });
+  }
+
+  Future<void> _analyzeDocument(String type, XFile image) async {
+    try {
+      final text = await _nationalIdOcr.readDocumentText(
+        imageBytes: await _readBytes(image),
+        filename: image.name,
+      );
+      if (!mounted) return;
+
+      final issues = <String>[];
+      if (type == 'national_id_front') {
+        final nationalId = NationalIdOcrService.extractNationalId(text);
+        final birthDate = NationalIdOcrService.birthDateFromNationalId(
+          nationalId,
+        );
+        final governorate = NationalIdOcrService.extractGovernorate(nationalId);
+        final name = NationalIdOcrService.extractArabicName(text);
+        _nationalId.value = TextEditingValue(
+          text: nationalId,
+          selection: TextSelection.collapsed(offset: nationalId.length),
+        );
+        _recognizedNationalId = nationalId;
+        _birthDate.text = birthDate == null ? '' : _isoDate(birthDate);
+        _nationalIdName = name;
+        _birthGovernorate = governorate;
+        if (name == null) issues.add('لم نتمكن من قراءة اسم البطاقة.');
+        if (governorate == null) {
+          issues.add('لم نتمكن من استخراج المحافظة من الرقم القومي.');
+        }
+      } else if (type == 'driving_license_front') {
+        final name = NationalIdOcrService.extractDrivingLicenseArabicName(text);
+        final englishName =
+            NationalIdOcrService.extractDrivingLicenseEnglishName(text);
+        final expiry = NationalIdOcrService.extractExpiryDate(text);
+        _drivingLicenseName = name;
+        if (englishName != null) _nameController.text = englishName;
+        _drivingLicenseExpiry = expiry;
+        if (name == null) issues.add('لم نتمكن من قراءة اسم رخصة القيادة.');
+        if (expiry == null) {
+          issues.add('لم نتمكن من قراءة تاريخ انتهاء رخصة القيادة.');
+        } else if (NationalIdOcrService.isPastDate(expiry)) {
+          issues.add('رخصة القيادة منتهية الصلاحية.');
+        }
+      } else if (type == 'vehicle_license_front') {
+        final expiry = NationalIdOcrService.extractVehicleLicenseExpiryDate(
+          text,
+        );
+        final details = NationalIdOcrService.extractVehicleDetails(text);
+        _vehicleLicenseExpiry = expiry;
+        if (expiry == null) {
+          issues.add('لم نتمكن من قراءة تاريخ انتهاء رخصة السيارة.');
+        } else if (NationalIdOcrService.isPastDate(expiry)) {
+          issues.add('رخصة السيارة منتهية الصلاحية (تاريخ النهاية: $expiry).');
+        }
+        _applyVehicleDetails(details);
+      } else {
+        final details = NationalIdOcrService.extractVehicleDetails(text);
+        _applyVehicleDetails(details);
+        if (details.isEmpty) {
+          issues.add(
+            'لم نتمكن من قراءة بيانات واضحة من ظهر رخصة السيارة. أعد تصويرها.',
+          );
+        }
+      }
+
+      if (_nationalIdName == null &&
+          type == 'driving_license_front' &&
+          _pendingUploads.containsKey('national_id_front')) {
+        issues.add('أعد فحص صورة البطاقة قبل مقارنة الاسم.');
+      }
+      _identityNameMismatch =
+          _nationalIdName != null &&
+          _drivingLicenseName != null &&
+          !NationalIdOcrService.namesMatch(
+            _nationalIdName!,
+            _drivingLicenseName!,
+          );
+      if (issues.isEmpty) {
+        _ocrValidatedDocuments.add(type);
+        _documentOcrIssues.remove(type);
+      } else {
+        _documentOcrIssues[type] = issues.join(' ');
+      }
+      setState(() {
+        _isReadingNationalId = false;
+        _isReadingDocument = false;
+        _nationalIdOcrError = _documentOcrIssues['national_id_front'];
+        _documentOcrError = _documentOcrIssues[type];
+      });
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is NationalIdOcrException
+          ? error.message
+          : error is StateError
+          ? error.message
+          : 'تعذر تحليل الصورة. تحقق من الاتصال واختر صورة أوضح.';
+      setState(() {
+        _isReadingNationalId = false;
+        _isReadingDocument = false;
+        _documentOcrIssues[type] = message;
+        _ocrValidatedDocuments.remove(type);
+        if (type == 'national_id_front') {
+          _nationalIdOcrError = message;
+        } else {
+          _documentOcrError = message;
+        }
+      });
+    }
+  }
+
+  void _applyVehicleDetails(Map<String, String> details) {
+    _make.text = details['make'] ?? _make.text;
+    _model.text = details['model'] ?? _model.text;
+    _year.text =
+        details['year']?.replaceAll(RegExp(r'[^0-9٠-٩۰-۹]'), '') ?? _year.text;
+    _year.text = NationalIdOcrService.normalizeDigits(_year.text);
+    _color.text = details['color'] ?? _color.text;
+    _plate.text = details['plate'] ?? _plate.text;
   }
 
   String _contentType(String filename) {
@@ -354,7 +488,16 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
     }
   }
 
-  Future<ImageSource?> _chooseNationalIdImageSource() {
+  Future<ImageSource?> _chooseDocumentImageSource(String type) {
+    final title = switch (type) {
+      'profile_photo' => 'صوّر صورة سيلفي واضحة',
+      'national_id_front' => 'صوّر الوجه الأمامي للبطاقة',
+      'national_id_back' => 'صوّر ظهر البطاقة',
+      'driving_license_front' => 'صوّر وجه رخصة القيادة',
+      'driving_license_back' => 'صوّر ظهر رخصة القيادة',
+      'vehicle_license_front' => 'صوّر وجه رخصة السيارة',
+      _ => 'صوّر ظهر رخصة السيارة',
+    };
     return showModalBottomSheet<ImageSource>(
       context: context,
       builder: (context) => SafeArea(
@@ -362,7 +505,7 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt_outlined),
-              title: const Text('تصوير الوجه الأمامي للبطاقة'),
+              title: Text(title),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
@@ -408,10 +551,56 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   Future<void> _continue() async {
     if (_busy || !(_formKey.currentState?.validate() ?? false)) return;
     if (_step == 0) {
+      final missingDocuments = _firstPageDocumentTypes
+          .where(
+            (type) =>
+                !_pendingUploads.containsKey(type) &&
+                _application?.document(type) == null,
+          )
+          .toList();
+      if (missingDocuments.isNotEmpty) {
+        setState(() {
+          for (final type in missingDocuments) {
+            _documentOcrIssues[type] =
+                'ارفع صورة ${_docLabels[type] ?? type} للمتابعة.';
+          }
+        });
+        _showMessage('ارفع كل صور الهوية والرخص المطلوبة قبل المتابعة.');
+        return;
+      }
+      if (_isReadingNationalId || _isReadingDocument) {
+        _showMessage('انتظر حتى تنتهي قراءة الصور.');
+        return;
+      }
+      final issue = _firstPageOcrIssue;
+      if (issue != null) {
+        _showMessage(issue);
+        return;
+      }
+      final expiryProblem = _expiredDocumentMessage();
+      if (expiryProblem != null) {
+        _showMessage(expiryProblem);
+        return;
+      }
+      if (!_ocrValidatedDocuments.containsAll(_ocrRequiredDocumentTypes)) {
+        _showMessage(
+          'لازم تعيد اختيار صور البطاقة والرخص لتحليل البيانات قبل المتابعة.',
+        );
+        return;
+      }
+      if (_identityNameMismatch) {
+        _showMessage('اسم البطاقة مختلف عن اسم الرخصة.');
+        return;
+      }
       setState(() => _step = 1);
       return;
     }
     if (_step == 1) {
+      if (!_ocrValidatedDocuments.containsAll(_ocrRequiredDocumentTypes)) {
+        setState(() => _step = 0);
+        _showMessage('حلّل صور المستندات في الصفحة الأولى قبل المتابعة.');
+        return;
+      }
       final nationalId = _latinDigits(_nationalId.text.trim());
       final profile = _application!.profile;
       final hasSavedNationalId = profile['nationalIdLast4'] != null;
@@ -421,6 +610,20 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
       }
       if (nationalId.isNotEmpty && !_validateIdMatchesBirthDate(nationalId)) {
         _showMessage('تاريخ الميلاد لازم يطابق الرقم القومي.');
+        return;
+      }
+      final expiryProblem = _expiredDocumentMessage();
+      if (expiryProblem != null) {
+        _showMessage(expiryProblem);
+        return;
+      }
+      if (_nationalIdName != null &&
+          _drivingLicenseName != null &&
+          !NationalIdOcrService.namesMatch(
+            _nationalIdName!,
+            _drivingLicenseName!,
+          )) {
+        _showMessage('الاسم في البطاقة لا يطابق الاسم في رخصة القيادة.');
         return;
       }
       final dateChanged = profile['dateOfBirth'] != _birthDate.text;
@@ -452,43 +655,40 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         if (fields.isNotEmpty) {
           _application = await _api.saveProfile(fields);
         }
-        final selfie = _pendingUploads.remove('profile_photo');
+        final selfie = _pendingUploads['profile_photo'];
         if (selfie != null) {
           _application = await _api.uploadDriverDocument(
             'profile_photo',
             await _readBytes(selfie),
             contentType: _contentType(selfie.name),
           );
+          _pendingUploads.remove('profile_photo');
+          _pendingPreviewBytes.remove('profile_photo');
         }
-        await _uploadPending(['national_id_front', 'national_id_back']);
+        await _uploadPending([
+          'national_id_front',
+          'national_id_back',
+          'driving_license_front',
+          'driving_license_back',
+        ]);
+        await _saveVehicle();
+        await _uploadPending(['vehicle_license_front', 'vehicle_license_back']);
       });
-      if (saved && _hasDocs(['national_id_front', 'national_id_back'])) {
+      if (saved &&
+          _hasDocs([
+            'profile_photo',
+            'national_id_front',
+            'national_id_back',
+            'driving_license_front',
+            'driving_license_back',
+            'vehicle_license_front',
+            'vehicle_license_back',
+          ])) {
         setState(() => _step = 2);
       }
       return;
     }
     if (_step == 2) {
-      final uploaded = await _run(() async {
-        await _uploadPending(['driving_license_front', 'driving_license_back']);
-      });
-      if (uploaded &&
-          _hasDocs(['driving_license_front', 'driving_license_back'])) {
-        setState(() => _step = 3);
-      }
-      return;
-    }
-    if (_step == 3) {
-      final saved = await _run(() async {
-        await _saveVehicle();
-        await _uploadPending(['vehicle_license_front', 'vehicle_license_back']);
-      });
-      if (saved &&
-          _hasDocs(['vehicle_license_front', 'vehicle_license_back'])) {
-        setState(() => _step = 4);
-      }
-      return;
-    }
-    if (_step == 4) {
       final required = [
         'vehicle_photo_front',
         'vehicle_photo_side',
@@ -499,10 +699,10 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         _showMessage('ارفع الصور الأربع للسيارة للمتابعة.');
         return;
       }
-      setState(() => _step = 5);
+      setState(() => _step = 3);
       return;
     }
-    if (_step == 5) {
+    if (_step == 3) {
       final saved = await _run(() async {
         final fields = <String, dynamic>{
           'method': _payoutMethod,
@@ -516,7 +716,7 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         _application = await _api.getApplication();
       });
       if (saved && _application?.payoutAccount != null) {
-        setState(() => _step = 6);
+        setState(() => _step = 4);
       }
       return;
     }
@@ -525,11 +725,13 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
 
   Future<void> _uploadPending(List<String> types) async {
     for (final type in types) {
-      final picked = _pendingUploads.remove(type);
+      final picked = _pendingUploads[type];
       if (picked == null) continue;
       if (type.startsWith('vehicle_')) {
         final id = _application?.activeVehicle?['id']?.toString();
-        if (id == null) continue;
+        if (id == null) {
+          throw StateError('احفظ بيانات السيارة قبل رفع رخصة السيارة.');
+        }
         _application = await _api.uploadVehicleDocument(
           id,
           type,
@@ -546,6 +748,8 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
           contentType: _contentType(picked.name),
         );
       }
+      _pendingUploads.remove(type);
+      _pendingPreviewBytes.remove(type);
     }
   }
 
@@ -634,6 +838,58 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         _birthDate.text == _isoDate(date);
   }
 
+  String? get _firstPageOcrIssue {
+    for (final type in _ocrRequiredDocumentTypes) {
+      final issue = _documentIssue(type);
+      if (issue != null) return issue;
+    }
+    return null;
+  }
+
+  String? _documentIssue(String type) {
+    if (_identityNameMismatch &&
+        (type == 'national_id_front' || type == 'driving_license_front')) {
+      return 'اسم البطاقة مختلف عن اسم الرخصة.';
+    }
+    if (type == 'vehicle_license_front' &&
+        _vehicleLicenseExpiry != null &&
+        NationalIdOcrService.isPastDate(_vehicleLicenseExpiry!)) {
+      return 'رخصة السيارة منتهية الصلاحية '
+          '(تاريخ النهاية: $_vehicleLicenseExpiry).';
+    }
+    final issue = _documentOcrIssues[type];
+    if (issue != null) return issue;
+    if (_step == 0 &&
+        _ocrRequiredDocumentTypes.contains(type) &&
+        _application?.document(type) != null &&
+        !_pendingUploads.containsKey(type) &&
+        !_ocrValidatedDocuments.contains(type)) {
+      return 'أعد اختيار الصورة لتحليلها قبل المتابعة.';
+    }
+    return null;
+  }
+
+  bool _isScanningDocument(String type) => type == 'national_id_front'
+      ? _isReadingNationalId
+      : (type == 'driving_license_front' ||
+                type == 'vehicle_license_front' ||
+                type == 'vehicle_license_back') &&
+            _isReadingDocument;
+
+  String? _expiredDocumentMessage() {
+    final expired = <String>[
+      if (_drivingLicenseExpiry != null &&
+          NationalIdOcrService.isPastDate(_drivingLicenseExpiry!))
+        'رخصة القيادة',
+      if (_vehicleLicenseExpiry != null &&
+          NationalIdOcrService.isPastDate(_vehicleLicenseExpiry!))
+        'رخصة السيارة',
+    ];
+    return expired.isEmpty
+        ? null
+        : 'انتهت صلاحية ${expired.join(' و')}. حدّث المستند قبل المتابعة.';
+  }
+
   void _showMessage(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -675,8 +931,8 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
           children: [
             DriverPageHeader(
               label: 'Driver application',
-              progress: '${_step + 1} OF 7',
-              onBack: () => setState(() => _step = (_step - 1).clamp(0, 6)),
+              progress: '${_step + 1} OF 5',
+              onBack: () => setState(() => _step = (_step - 1).clamp(0, 4)),
             ),
             Expanded(
               child: RefreshIndicator(
@@ -714,14 +970,14 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
                 child: PrimaryButton(
                   label: _busy
                       ? 'جارٍ الحفظ...'
-                      : _step == 5
+                      : _step == 3
                       ? 'Save payment details'
-                      : _step == 6
+                      : _step == 4
                       ? 'Send for review'
                       : 'Continue',
                   onPressed:
                       _busy ||
-                          (_step == 6 &&
+                          (_step == 4 &&
                               (_application!.missing.isNotEmpty || !_confirm))
                       ? null
                       : _continue,
@@ -735,84 +991,103 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   }
 
   Widget _stepContent() => switch (_step) {
-    0 => _personalStep(),
-    1 => _identityStep(),
-    2 => _licenseStep(),
-    3 => _vehicleStep(),
-    4 => _vehiclePhotosStep(),
-    5 => _payoutStep(),
+    0 => _documentsStep(),
+    1 => _detailsStep(),
+    2 => _vehiclePhotosStep(),
+    3 => _payoutStep(),
     _ => _reviewStep(),
   };
 
-  Widget _personalStep() => Column(
+  Widget _documentsStep() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      _readOnlyField('Full legal name', _nameController, Icons.person_outline),
-      const SizedBox(height: 18),
-      _readOnlyField('Mobile number', _phoneController, Icons.call_outlined),
-      const SizedBox(height: 18),
-      _dropdown<String>(
-        label: 'City',
-        value: _cityId,
-        items: _list('cities').map((item) {
-          return DropdownMenuItem(
-            value: item['id'].toString(),
-            child: Text(
-              item['nameEn']?.toString() ?? item['nameAr'].toString(),
-            ),
-          );
-        }).toList(),
-        onChanged: (value) => setState(() => _cityId = value),
+      const NoticePanel(
+        text:
+            'ارفع الوش والظهر للبطاقة، السيلفي، ووش وظهر رخصة القيادة ورخصة السيارة. سنقرأ البيانات المتاحة تلقائيًا ثم تراجعها في الصفحة التالية.',
+        icon: Icons.info_outline,
       ),
       const SizedBox(height: 18),
-      DriverField(
-        label: 'Date of birth',
-        controller: _birthDate,
-        icon: Icons.calendar_month_outlined,
-        readOnly: true,
-        onTap: _pickBirthDate,
-        validator: (value) {
-          final date = DateTime.tryParse(value ?? '');
-          if (date == null) return 'Choose your date of birth.';
-          final settings =
-              (_catalog['settings'] as Map?)?.cast<String, dynamic>() ??
-              const {};
-          final age = (settings['minDriverAge'] as num?)?.toInt() ?? 21;
-          final now = DateTime.now();
-          final latest = DateTime(now.year - age, now.month, now.day);
-          return date.isAfter(latest)
-              ? 'You must be at least $age years old.'
-              : null;
-        },
-      ),
-      const SizedBox(height: 18),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('How many helpers can you bring?'),
-          Slider(
-            value: _maxHelpers.toDouble(),
-            min: 0,
-            max: 20,
-            divisions: 20,
-            label: '$_maxHelpers',
-            onChanged: (value) => setState(() => _maxHelpers = value.round()),
+      for (final type in _firstPageDocumentTypes) ...[
+        _photoButton(type),
+        const SizedBox(height: 14),
+      ],
+      if (_isReadingNationalId || _isReadingDocument)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 10),
+              Text('جاري قراءة البيانات من الصور...'),
+            ],
           ),
-        ],
-      ),
-      const SizedBox(height: 8),
-      _photoButton('profile_photo'),
+        ),
+      if (_nationalIdOcrError != null || _documentOcrError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            _nationalIdOcrError ?? _documentOcrError!,
+            style: TextStyle(color: Colors.red.shade700),
+          ),
+        ),
     ],
   );
 
-  Widget _identityStep() => Column(
+  Widget _detailsStep() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      _readOnlyField('Full legal name', _nameController, Icons.person_outline),
+      const SizedBox(height: 18),
+      _readOnlyField('Email', _emailController, Icons.email_outlined),
+      const SizedBox(height: 18),
+      _readOnlyField('Mobile number', _phoneController, Icons.call_outlined),
+      if (_nationalIdName != null) ...[
+        const SizedBox(height: 18),
+        _readOnlyValue('الاسم على البطاقة', _nationalIdName!),
+      ],
+      if (_drivingLicenseName != null) ...[
+        const SizedBox(height: 12),
+        _readOnlyValue('الاسم على رخصة القيادة', _drivingLicenseName!),
+      ],
+      if (_nationalIdName != null && _drivingLicenseName != null) ...[
+        const SizedBox(height: 12),
+        NoticePanel(
+          text:
+              NationalIdOcrService.namesMatch(
+                _nationalIdName!,
+                _drivingLicenseName!,
+              )
+              ? 'الاسم متطابق بين البطاقة ورخصة القيادة.'
+              : 'الاسم في البطاقة لا يطابق الاسم في رخصة القيادة. راجع الصور والبيانات.',
+          icon:
+              NationalIdOcrService.namesMatch(
+                _nationalIdName!,
+                _drivingLicenseName!,
+              )
+              ? Icons.verified_outlined
+              : Icons.error_outline,
+        ),
+      ],
+      if (_nationalIdName == null || _drivingLicenseName == null) ...[
+        const SizedBox(height: 12),
+        const NoticePanel(
+          text:
+              'تعذّر على OCR استخراج الاسم من أحد المستندين، لذلك لم نتمكن من مقارنة الاسمين تلقائيًا. راجع تطابقهما يدويًا.',
+          icon: Icons.warning_amber_outlined,
+        ),
+      ],
+      const SizedBox(height: 18),
       DriverField(
-        label: 'National ID number',
+        label: 'الرقم القومي',
         controller: _nationalId,
         icon: Icons.badge_outlined,
-        hintText: 'اكتب الرقم أو صوّر الوجه الأمامي للبطاقة',
+        hintText: '14 رقمًا',
         keyboardType: TextInputType.number,
+        readOnly: true,
         inputFormatters: [
           FilteringTextInputFormatter.allow(RegExp(r'[0-9٠-٩۰-۹]')),
         ],
@@ -842,60 +1117,100 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
           return null;
         },
       ),
-      const SizedBox(height: 18),
+      const SizedBox(height: 12),
       NationalIdOcrStatus(
         isReading: _isReadingNationalId,
         recognizedId: _recognizedNationalId,
         enteredId: _nationalId.text,
         error: _nationalIdOcrError,
       ),
-      const SizedBox(height: 18),
-      _photoButton('national_id_front'),
-      const SizedBox(height: 14),
-      _photoButton('national_id_back'),
-      if (_application!.profile['nationalIdLast4'] != null) ...[
-        const SizedBox(height: 12),
-        Text(
-          'Saved ID: •••• •••• ••${_application!.profile['nationalIdLast4']}',
+      if (_birthGovernorate != null) ...[
+        const SizedBox(height: 14),
+        _readOnlyValue(
+          'محافظة الميلاد المستخرجة من الرقم القومي',
+          _birthGovernorate!,
         ),
       ],
-    ],
-  );
-
-  Widget _licenseStep() => Column(
-    children: [
+      const SizedBox(height: 18),
       _dropdown<String>(
-        label: 'License category',
+        label: 'مدينة العمل',
+        value: _cityId,
+        items: _list('cities').map((item) {
+          return DropdownMenuItem(
+            value: item['id'].toString(),
+            child: Text(
+              item['nameAr']?.toString() ?? item['nameEn'].toString(),
+            ),
+          );
+        }).toList(),
+        onChanged: (value) => setState(() => _cityId = value),
+      ),
+      const SizedBox(height: 18),
+      DriverField(
+        label: 'تاريخ الميلاد',
+        controller: _birthDate,
+        icon: Icons.calendar_month_outlined,
+        readOnly: true,
+        onTap: _pickBirthDate,
+        validator: (value) {
+          final date = DateTime.tryParse(value ?? '');
+          if (date == null) return 'اختر تاريخ الميلاد.';
+          final settings =
+              (_catalog['settings'] as Map?)?.cast<String, dynamic>() ??
+              const {};
+          final age = (settings['minDriverAge'] as num?)?.toInt() ?? 21;
+          final now = DateTime.now();
+          final latest = DateTime(now.year - age, now.month, now.day);
+          return date.isAfter(latest) ? 'الحد الأدنى للعمر $age سنة.' : null;
+        },
+      ),
+      const SizedBox(height: 18),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('عدد العمال المساعدين'),
+          Slider(
+            value: _maxHelpers.toDouble(),
+            min: 0,
+            max: 20,
+            divisions: 20,
+            label: '$_maxHelpers',
+            onChanged: (value) => setState(() => _maxHelpers = value.round()),
+          ),
+        ],
+      ),
+      if (_application!.profile['nationalIdLast4'] != null &&
+          _nationalId.text.isEmpty) ...[
+        const SizedBox(height: 12),
+        Text(
+          'رقم محفوظ: •••• •••• ••${_application!.profile['nationalIdLast4']}',
+        ),
+      ],
+      const SizedBox(height: 22),
+      _dropdown<String>(
+        label: 'فئة رخصة القيادة',
         value: _licenseCategory,
         items: const [
-          DropdownMenuItem(value: 'private', child: Text('Private')),
+          DropdownMenuItem(value: 'private', child: Text('خاصة')),
           DropdownMenuItem(
             value: 'professional_3',
-            child: Text('Professional · 3rd'),
+            child: Text('مهنية · ثالثة'),
           ),
           DropdownMenuItem(
             value: 'professional_2',
-            child: Text('Professional · 2nd'),
+            child: Text('مهنية · ثانية'),
           ),
           DropdownMenuItem(
             value: 'professional_1',
-            child: Text('Professional · 1st'),
+            child: Text('مهنية · أولى'),
           ),
         ],
         onChanged: (value) =>
             setState(() => _licenseCategory = value ?? _licenseCategory),
       ),
-      const SizedBox(height: 18),
-      _photoButton('driving_license_front'),
-      const SizedBox(height: 14),
-      _photoButton('driving_license_back'),
-    ],
-  );
-
-  Widget _vehicleStep() => Column(
-    children: [
+      const SizedBox(height: 22),
       _dropdown<String>(
-        label: 'Vehicle type',
+        label: 'نوع السيارة',
         value: _vehicleTypeId,
         items: _list('vehicleTypes')
             .map(
@@ -910,12 +1225,12 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         onChanged: (value) => setState(() => _vehicleTypeId = value),
       ),
       const SizedBox(height: 18),
-      _textField('Make', _make, Icons.local_shipping_outlined),
+      _textField('الشركة المصنعة', _make, Icons.local_shipping_outlined),
       const SizedBox(height: 18),
-      _textField('Model', _model, Icons.local_shipping_outlined),
+      _textField('الموديل', _model, Icons.local_shipping_outlined),
       const SizedBox(height: 18),
       DriverField(
-        label: 'Manufacture year',
+        label: 'سنة التصنيع',
         controller: _year,
         icon: Icons.calendar_today_outlined,
         keyboardType: TextInputType.number,
@@ -931,13 +1246,36 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         },
       ),
       const SizedBox(height: 18),
-      _textField('Color', _color, Icons.palette_outlined),
+      _textField('اللون أو الألوان', _color, Icons.palette_outlined),
       const SizedBox(height: 18),
-      _textField('Plate number', _plate, Icons.tag),
-      const SizedBox(height: 18),
-      _photoButton('vehicle_license_front'),
-      const SizedBox(height: 14),
-      _photoButton('vehicle_license_back'),
+      _textField('رقم اللوحة', _plate, Icons.tag),
+      if (_drivingLicenseExpiry != null || _vehicleLicenseExpiry != null) ...[
+        const SizedBox(height: 22),
+        const Text(
+          'تواريخ انتهاء المستندات المستخرجة',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        if (_drivingLicenseExpiry != null)
+          _expiryValue('رخصة القيادة', _drivingLicenseExpiry!),
+        if (_vehicleLicenseExpiry != null)
+          _expiryValue('رخصة السيارة', _vehicleLicenseExpiry!),
+      ],
+      if (_drivingLicenseExpiry == null || _vehicleLicenseExpiry == null) ...[
+        const SizedBox(height: 12),
+        const NoticePanel(
+          text:
+              'تعذّر على OCR قراءة تاريخ انتهاء رخصة أو أكثر. راجع التواريخ الظاهرة في الصور يدويًا قبل المتابعة.',
+          icon: Icons.warning_amber_outlined,
+        ),
+      ],
+      if (_documentOcrError != null) ...[
+        const SizedBox(height: 12),
+        Text(
+          _documentOcrError!,
+          style: TextStyle(color: Colors.orange.shade900),
+        ),
+      ],
     ],
   );
 
@@ -1117,6 +1455,9 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
     final pending = _pendingUploads.containsKey(type);
     final url = document?['url'] as String?;
     final status = document?['status'] as String?;
+    final issue = _documentIssue(type);
+    final scanning = _isScanningDocument(type);
+    final ocrComplete = _ocrValidatedDocuments.contains(type);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -1124,50 +1465,126 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(9),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (url != null)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Image.network(
-                url,
-                width: 54,
-                height: 54,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) =>
-                    const Icon(Icons.broken_image_outlined),
-              ),
-            )
-          else
-            const Icon(
-              Icons.photo_camera_outlined,
-              color: AppColors.accent,
-              size: 25,
-            ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _docLabels[type] ?? type,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              _documentPreview(type, url),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _docLabels[type] ?? type,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    if (status == 'rejected')
+                      Text(
+                        _rejectionText(document!),
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
+                    if (pending) const Text('Selected'),
+                  ],
                 ),
-                if (status == 'rejected')
-                  Text(
-                    _rejectionText(document!),
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
-                  ),
-                if (pending) const Text('Selected'),
+              ),
+              TextButton(
+                onPressed: _busy || _isReadingNationalId || _isReadingDocument
+                    ? null
+                    : () => _pickAndUpload(type),
+                child: Text(
+                  document != null || pending ? 'Retake' : 'Add photo',
+                ),
+              ),
+            ],
+          ),
+          if (scanning) ...[
+            const SizedBox(height: 10),
+            const Row(
+              children: [
+                SizedBox(
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text('جاري تحليل الصورة باستخدام OCR...'),
               ],
             ),
-          ),
-          TextButton(
-            onPressed: _busy ? null : () => _pickAndUpload(type),
-            child: Text(document != null || pending ? 'Retake' : 'Add photo'),
-          ),
+          ] else if (issue != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              issue,
+              style: TextStyle(
+                color: Colors.red.shade800,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ] else if (ocrComplete) ...[
+            const SizedBox(height: 8),
+            const Row(
+              children: [
+                Icon(Icons.check_circle_outline, color: Colors.green, size: 18),
+                SizedBox(width: 6),
+                Text(
+                  'تم تحليل الصورة والبيانات المطلوبة سليمة.',
+                  style: TextStyle(color: Colors.green),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _documentPreview(String type, String? url) {
+    final pendingBytes = _pendingPreviewBytes[type];
+    if (pendingBytes != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: FutureBuilder<Uint8List>(
+          future: pendingBytes,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const SizedBox(
+                width: 54,
+                height: 54,
+                child: Icon(
+                  Icons.photo_camera_outlined,
+                  color: AppColors.accent,
+                ),
+              );
+            }
+            return Image.memory(
+              snapshot.data!,
+              width: 54,
+              height: 54,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) =>
+                  const Icon(Icons.broken_image_outlined),
+            );
+          },
+        ),
+      );
+    }
+    if (url != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.network(
+          url,
+          width: 54,
+          height: 54,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined),
+        ),
+      );
+    }
+    return const Icon(
+      Icons.photo_camera_outlined,
+      color: AppColors.accent,
+      size: 25,
     );
   }
 
@@ -1202,6 +1619,42 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
     icon: icon,
     readOnly: true,
   );
+
+  Widget _readOnlyValue(String label, String value) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(9),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12)),
+        const SizedBox(height: 6),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+      ],
+    ),
+  );
+
+  Widget _expiryValue(String label, String date) {
+    final expired = NationalIdOcrService.isPastDate(date);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Icon(
+            expired ? Icons.error_outline : Icons.verified_outlined,
+            color: expired ? Colors.red : Colors.green,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Text('$label · $date')),
+          Text(expired ? 'منتهي' : 'ساري'),
+        ],
+      ),
+    );
+  }
 
   Widget _textField(
     String label,

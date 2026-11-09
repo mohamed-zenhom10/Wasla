@@ -3,6 +3,10 @@ cd C:\Users\alext\Desktop\project_01\test\Wasla\mobile\driver
 flutter run -d edge --web-port 5173
 flutter run -d edge --web-port 5173 --dart-define=NATIONAL_ID_OCR_API_KEY=K8590905089582588957
 
+flutter run -d edge --web-port 5173 --dart-define=NATIONAL_ID_OCR_API_KEY=K8858359170701888957
+
+
+
 driver_acc
 mo9462623@gmail.com
 0123456789

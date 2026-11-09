@@ -71,35 +71,36 @@ class DriverApplication {
   }
 
   int get nextStep {
-    if (status == 'not_started' ||
-        missing.contains('profile') ||
-        missing.contains('min_age') ||
-        missing.contains('active_city')) {
+    if (status == 'not_started') {
       return 0;
     }
-    if (missing.contains('national_id') ||
-        document('national_id_front') == null ||
-        document('national_id_back') == null) {
+    if ([
+      'profile_photo',
+      'national_id_front',
+      'national_id_back',
+      'driving_license_front',
+      'driving_license_back',
+      'vehicle_license_front',
+      'vehicle_license_back',
+    ].any((type) => document(type) == null)) {
+      return 0;
+    }
+    if (missing.contains('profile') ||
+        missing.contains('national_id') ||
+        missing.contains('min_age') ||
+        missing.contains('active_city') ||
+        missing.contains('vehicle') ||
+        missing.contains('license_too_low')) {
       return 1;
-    }
-    if (document('driving_license_front') == null ||
-        document('driving_license_back') == null) {
-      return 2;
-    }
-    if (missing.contains('vehicle') ||
-        missing.contains('license_too_low') ||
-        document('vehicle_license_front') == null ||
-        document('vehicle_license_back') == null) {
-      return 3;
     }
     if (missing.contains('vehicle_documents') ||
         document('vehicle_photo_front') == null ||
         document('vehicle_photo_side') == null ||
         document('vehicle_photo_rear') == null ||
         document('vehicle_photo_cargo') == null) {
-      return 4;
+      return 2;
     }
-    if (missing.contains('payout_account')) return 5;
-    return 6;
+    if (missing.contains('payout_account')) return 3;
+    return 4;
   }
 }

@@ -132,6 +132,7 @@ void main() {
       status: 'draft',
       profile: const {'activeVehicleId': 'vehicle-1'},
       documents: const [
+        {'type': 'profile_photo'},
         {'type': 'national_id_front'},
         {'type': 'national_id_back'},
         {'type': 'driving_license_front'},
@@ -154,7 +155,7 @@ void main() {
       missing: const [],
     );
 
-    expect(application.nextStep, 6);
+    expect(application.nextStep, 4);
   });
 
   testWidgets('pending rejected vehicle document offers a replacement', (
