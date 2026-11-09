@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:country_code_picker/country_code_picker.dart';
 import 'package:main/components/auth_components.dart';
 import 'package:main/screens/otp_screen.dart';
 import 'package:main/services/auth_service.dart';
+import 'package:main/services/international_phone_number.dart';
 import 'package:main/theme/app_theme.dart';
+import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 
 final RegExp _signUpPasswordRegex = RegExp(
   r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{8,}$',
@@ -23,6 +26,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  IsoCode _selectedPhoneCountry = IsoCode.EG;
   bool _acceptedTerms = false;
   bool _isSubmitting = false;
 
@@ -34,28 +38,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
-  }
-
-  String _normalizePhoneNumber(String value) {
-    return value.trim().replaceAll(RegExp(r'[\s\-]+'), '');
-  }
-
-  bool _isValidInternationalPhone(String value) {
-    final normalized = _normalizePhoneNumber(value);
-
-    if (normalized.isEmpty || !normalized.startsWith('+')) {
-      return false;
-    }
-
-    if (!RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(normalized)) {
-      return false;
-    }
-
-    if (normalized.startsWith('+20') && normalized.length > 3 && normalized[3] == '0') {
-      return false;
-    }
-
-    return true;
   }
 
   Future<void> _continue() async {
@@ -72,7 +54,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     setState(() => _isSubmitting = true);
 
-    final normalizedPhone = _normalizePhoneNumber(_phoneController.text);
+    final normalizedPhone = InternationalPhoneNumber.toE164(
+      _phoneController.text,
+      _selectedPhoneCountry,
+    );
+    if (normalizedPhone == null) {
+      setState(() => _isSubmitting = false);
+      _formKey.currentState!.validate();
+      return;
+    }
+
     final result = await AuthService.register(
       fullName: _nameController.text.trim(),
       email: _emailController.text.trim(),
@@ -85,15 +76,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isSubmitting = false);
 
     if (!result.success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(result.message)));
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.message)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(result.message)));
 
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -103,6 +92,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
       ),
     );
+  }
+
+  String? _validatePhoneNumber(String? value) {
+    if (InternationalPhoneNumber.parse(value ?? '', _selectedPhoneCountry) ==
+        null) {
+      return 'Enter a valid phone number for the selected country';
+    }
+    return null;
   }
 
   @override
@@ -129,27 +126,86 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   : null,
             ),
             const SizedBox(height: 18),
-            LabeledInput(
-              label: 'Phone number',
-              controller: _phoneController,
-              icon: Icons.call_outlined,
-              keyboardType: TextInputType.phone,
-              textInputAction: TextInputAction.next,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[+0-9\s-]')),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Phone number', style: AppTypography.labelMd),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.light,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: AppColors.borderLight),
+                  ),
+                  child: Row(
+                    children: [
+                      CountryCodePicker(
+                        initialSelection: 'EG',
+                        favorite: const ['+20', 'US'],
+                        countryFilter: IsoCode.values
+                            .map((isoCode) => isoCode.name)
+                            .toList(growable: false),
+                        showCountryOnly: false,
+                        showOnlyCountryWhenClosed: false,
+                        showDropDownButton: true,
+                        showFlag: true,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        textStyle: AppTypography.bodySm,
+                        dialogTextStyle: AppTypography.bodySm,
+                        searchStyle: AppTypography.bodySm,
+                        dialogBackgroundColor: AppColors.white,
+                        onChanged: (country) {
+                          final isoCode = country.code;
+                          if (isoCode == null) return;
+                          final matchedCountries = IsoCode.values.where(
+                            (iso) => iso.name == isoCode,
+                          );
+                          if (matchedCountries.isEmpty) return;
+                          setState(() {
+                            _selectedPhoneCountry = matchedCountries.first;
+                          });
+                          _formKey.currentState?.validate();
+                        },
+                      ),
+                      Container(
+                        width: 1,
+                        height: 28,
+                        color: AppColors.borderLight,
+                      ),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.next,
+                          style: AppTypography.bodyMd,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9\s()-]'),
+                            ),
+                          ],
+                          validator: _validatePhoneNumber,
+                          decoration: InputDecoration(
+                            hintText: 'Phone number',
+                            hintStyle: AppTypography.bodySm.copyWith(
+                              color: AppColors.gray,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            errorBorder: InputBorder.none,
+                            focusedErrorBorder: InputBorder.none,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
-              validator: (value) {
-                final normalized = (value ?? '').trim();
-                if (normalized.isEmpty) {
-                  return 'Enter a valid international phone number including the country code';
-                }
-
-                if (!_isValidInternationalPhone(normalized)) {
-                  return 'Enter a valid international phone number including the country code';
-                }
-
-                return null;
-              },
             ),
             const SizedBox(height: 18),
             LabeledInput(

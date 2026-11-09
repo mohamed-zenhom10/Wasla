@@ -127,7 +127,7 @@ void main() {
       const MaterialApp(home: HomeScreen(isPreview: true)),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Morning, Mariam'), findsOneWidget);
+    expect(find.text('Welcome'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.drag(
@@ -136,6 +136,47 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Estimate my cargo'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('main navigation switches between all existing destinations', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(home: HomeScreen(isPreview: true)),
+    );
+    await tester.pumpAndSettle();
+
+    final navigation = find.byType(BottomNavigationBar);
+
+    await tester.tap(find.text('Messages').first);
+    await tester.pumpAndSettle();
+    expect(find.text('No conversations yet'), findsOneWidget);
+    expect(tester.widget<BottomNavigationBar>(navigation).currentIndex, 2);
+
+    await tester.tap(find.text('Wallet').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Available balance'), findsOneWidget);
+    expect(find.text('No transactions yet'), findsOneWidget);
+    expect(tester.widget<BottomNavigationBar>(navigation).currentIndex, 3);
+
+    await tester.tap(find.text('Profile').first);
+    await tester.pump();
+    expect(find.text('Profile'), findsNWidgets(2));
+    expect(tester.widget<BottomNavigationBar>(navigation).currentIndex, 4);
+
+    await tester.tap(find.text('Trips').first);
+    await tester.pump();
+    expect(find.text('Recent moves'), findsOneWidget);
+    expect(tester.widget<BottomNavigationBar>(navigation).currentIndex, 1);
+
+    await tester.tap(find.text('Home').first);
+    await tester.pump();
+    expect(find.text('Welcome'), findsOneWidget);
+    expect(tester.widget<BottomNavigationBar>(navigation).currentIndex, 0);
     expect(tester.takeException(), isNull);
   });
 }

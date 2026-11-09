@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:main/components/app_page_header.dart';
 import 'package:main/components/main_button.dart';
 import 'package:main/pages/cargo_category_page.dart';
+import 'package:main/pages/messages_page.dart';
+import 'package:main/pages/profile_page.dart';
 import 'package:main/pages/your_activity_page.dart';
+import 'package:main/pages/wallet_page.dart';
+import 'package:main/services/auth_service.dart';
 import 'package:main/services/cargo_order_service.dart';
-import 'package:main/screens/login_screen.dart';
 import 'package:main/theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -26,12 +30,20 @@ class HomeScreenState extends State<HomeScreen> {
   final _pickupController = TextEditingController();
   final _destinationController = TextEditingController();
   int _selectedTab = 0;
+  String? _customerName;
 
   @override
   void initState() {
     super.initState();
     _selectedTab = widget.initialTab.clamp(0, _tabNames.length - 1);
     _latestOrder = widget.initialActivityOrder;
+    if (!widget.isPreview) _loadCustomerName();
+  }
+
+  Future<void> _loadCustomerName() async {
+    final session = await AuthService.loadSession();
+    if (!mounted) return;
+    setState(() => _customerName = session?.fullName);
   }
 
   void setTab(int index) {
@@ -44,7 +56,9 @@ class HomeScreenState extends State<HomeScreen> {
   void showTrips({CargoActivityItem? order}) {
     setTab(1);
     if (order != null) {
-      setState(() { _latestOrder = order; });
+      setState(() {
+        _latestOrder = order;
+      });
     }
   }
 
@@ -97,16 +111,8 @@ class HomeScreenState extends State<HomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'W',
-                    style: TextStyle(
-                      color: AppColors.accent,
-                      fontSize: 36,
-                      height: 1,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const Text(
+                  const AppLogo(size: 40),
+                  Text(
                     'CAIRO, EGYPT',
                     style: TextStyle(color: AppColors.darkGreen, fontSize: 10),
                   ),
@@ -130,12 +136,12 @@ class HomeScreenState extends State<HomeScreen> {
                 ),
               ],
               const SizedBox(height: 12),
-              const Text(
-                'Morning, Mariam',
-                style: TextStyle(
-                  color: AppColors.darkGreen,
+              Text(
+                _customerName == null ? 'Welcome' : 'Morning, $_customerName',
+                style: AppTypography.headingSm.copyWith(
                   fontSize: 25,
                   fontWeight: FontWeight.w800,
+                  height: 1.15,
                 ),
               ),
               const SizedBox(height: 16),
@@ -231,21 +237,15 @@ class HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      YourActivityPage(
-        savedOrder: _latestOrder,
-        onDone: () => setTab(0),
-      ),
-      const _PlaceholderTab(label: 'Messages'),
-      const _PlaceholderTab(label: 'Wallet'),
-      const _PlaceholderTab(label: 'Profile'),
+      YourActivityPage(savedOrder: _latestOrder, onDone: () => setTab(0)),
+      const MessagesPage(),
+      const WalletPage(),
+      ProfilePage(isActive: _selectedTab == 4),
     ];
 
     return Scaffold(
       backgroundColor: AppColors.white,
-      body: IndexedStack(
-        index: _selectedTab,
-        children: pages,
-      ),
+      body: IndexedStack(index: _selectedTab, children: pages),
       bottomNavigationBar: SafeArea(
         top: false,
         child: BottomNavigationBar(
@@ -256,13 +256,6 @@ class HomeScreenState extends State<HomeScreen> {
           selectedFontSize: 10,
           unselectedFontSize: 10,
           onTap: (index) {
-            if (index == 4 && widget.isPreview) {
-              setTab(index);
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
-              );
-              return;
-            }
             if (index == 1) {
               _handleTripsTap();
               return;
@@ -272,13 +265,6 @@ class HomeScreenState extends State<HomeScreen> {
               return;
             }
             setTab(index);
-            if (index != 0) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${_tabNames[index]} is not connected yet.'),
-                ),
-              );
-            }
           },
           items: const [
             BottomNavigationBarItem(
@@ -309,24 +295,6 @@ class HomeScreenState extends State<HomeScreen> {
 }
 
 const _tabNames = ['Home', 'Trips', 'Messages', 'Wallet', 'Profile'];
-
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Center(
-        child: Text(
-          '$label is not connected yet.',
-          style: const TextStyle(color: AppColors.darkGreen, fontSize: 16),
-        ),
-      ),
-    );
-  }
-}
 
 class _LocationInput extends StatelessWidget {
   const _LocationInput({

@@ -9,10 +9,20 @@ class AuthSession {
   final String token;
   final Map<String, dynamic> user;
 
-  Map<String, dynamic> toJson() => {
-    'token': token,
-    'user': user,
-  };
+  String? get fullName {
+    final name = user['fullName'] ?? user['name'];
+    if (name is String && name.trim().isNotEmpty) return name.trim();
+
+    final firstName = user['firstName'];
+    final lastName = user['lastName'];
+    final combined = [
+      if (firstName is String) firstName.trim(),
+      if (lastName is String) lastName.trim(),
+    ].where((part) => part.isNotEmpty).join(' ');
+    return combined.isEmpty ? null : combined;
+  }
+
+  Map<String, dynamic> toJson() => {'token': token, 'user': user};
 
   factory AuthSession.fromJson(Map<String, dynamic> data) {
     final token = data['token'] ?? data['accessToken'];
@@ -29,7 +39,11 @@ class AuthSession {
 }
 
 class AuthResult {
-  const AuthResult({required this.success, required this.message, this.session});
+  const AuthResult({
+    required this.success,
+    required this.message,
+    this.session,
+  });
 
   final bool success;
   final String message;
@@ -52,10 +66,7 @@ class AuthService {
   }) async {
     return _request(
       endpoint: '/auth/login',
-      payload: {
-        'email': email.trim(),
-        'password': password,
-      },
+      payload: {'email': email.trim(), 'password': password},
       successMessage: 'Login successful.',
       onSuccess: (payload) => _sessionFromPayload(payload),
     );
@@ -71,10 +82,8 @@ class AuthService {
       endpoint: '/auth/register',
       payload: {
         'fullName': fullName.trim(),
-        'name': fullName.trim(),
         'email': email.trim(),
         'phone': phone.trim(),
-        'phoneNumber': phone.trim(),
         'password': password,
         'role': 'customer',
         'acceptPolicies': true,
@@ -90,11 +99,7 @@ class AuthService {
   }) async {
     return _request(
       endpoint: '/auth/verify-email',
-      payload: {
-        'email': email.trim(),
-        'code': code.trim(),
-        'otp': code.trim(),
-      },
+      payload: {'email': email.trim(), 'code': code.trim(), 'otp': code.trim()},
       successMessage: 'Email verified successfully.',
       onSuccess: (payload) => _sessionFromPayload(payload),
     );
@@ -137,20 +142,45 @@ class AuthService {
     );
   }
 
+  static Future<AuthResult> logout() async {
+    try {
+      final token = await _secureStorage.read(key: 'wasla_auth_token');
+      if (token == null || token.trim().isEmpty) {
+        return AuthResult.failure(message: 'No active session was found.');
+      }
+
+      return await _request(
+        endpoint: '/auth/logout',
+        payload: const {},
+        successMessage: 'Logged out successfully.',
+        bearerToken: token,
+        onSuccess: (_) => null,
+      );
+    } finally {
+      await clearSession();
+    }
+  }
+
   static Future<AuthResult> _request({
     required String endpoint,
     required Map<String, dynamic> payload,
     required String successMessage,
     required AuthSession? Function(Map<String, dynamic> payload) onSuccess,
+    String? bearerToken,
   }) async {
     try {
+      final headers = <String, String>{
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      };
+      if (bearerToken != null) {
+        headers['Authorization'] = 'Bearer $bearerToken';
+      }
+
       final response = await http
           .post(
             Uri.parse('$_baseUrl$endpoint'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
+            headers: headers,
             body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 20));
@@ -167,11 +197,15 @@ class AuthService {
         return AuthResult.success(message: successMessage);
       }
 
-      final message = _messageFromPayload(decoded, fallback: 'Request failed ($statusCode).');
+      final message = _messageFromPayload(
+        decoded,
+        fallback: 'Request failed ($statusCode).',
+      );
       return AuthResult.failure(message: message);
     } on http.ClientException catch (error) {
       return AuthResult.failure(
-        message: 'Network error: ${error.message}. Please check your internet connection.',
+        message:
+            'Network error: ${error.message}. Please check your internet connection.',
       );
     } on FormatException catch (error) {
       return AuthResult.failure(message: error.message);
@@ -189,8 +223,10 @@ class AuthService {
   }
 
   static Future<void> clearSession() async {
-    await _secureStorage.delete(key: 'wasla_auth_token');
-    await _secureStorage.delete(key: 'wasla_user_data');
+    await Future.wait([
+      _secureStorage.delete(key: 'wasla_auth_token'),
+      _secureStorage.delete(key: 'wasla_user_data'),
+    ]);
   }
 
   static Future<AuthSession?> loadSession() async {
@@ -210,7 +246,10 @@ class AuthService {
         return AuthSession(token: token, user: decodedUser);
       }
       if (decodedUser is Map) {
-        return AuthSession(token: token, user: Map<String, dynamic>.from(decodedUser));
+        return AuthSession(
+          token: token,
+          user: Map<String, dynamic>.from(decodedUser),
+        );
       }
       return AuthSession(token: token, user: {'name': 'Wasla User'});
     } on FormatException {
@@ -242,13 +281,20 @@ class AuthService {
     }
   }
 
-  static String _messageFromPayload(Map<String, dynamic> payload, {required String fallback}) {
-    final rawMessage = payload['message'] ?? payload['error'] ?? payload['detail'];
+  static String _messageFromPayload(
+    Map<String, dynamic> payload, {
+    required String fallback,
+  }) {
+    final error = payload['error'];
+    final rawMessage =
+        payload['message'] ??
+        (error is Map ? error['message'] : error) ??
+        payload['detail'];
     if (rawMessage is String && rawMessage.trim().isNotEmpty) {
       return rawMessage;
     }
 
-    final validationErrors = payload['errors'];
+    final validationErrors = payload['errors'] ?? (error is Map ? error : null);
     if (validationErrors is Map) {
       final firstValue = validationErrors.values.first;
       if (firstValue is List && firstValue.isNotEmpty) {
@@ -265,12 +311,16 @@ class AuthService {
   static AuthSession? _sessionFromPayload(Map<String, dynamic> payload) {
     final dataNode = payload['data'];
     final userNode = payload['user'];
-    final token = payload['token'] ?? payload['accessToken'] ?? dataNode?['token'] ?? dataNode?['accessToken'];
+    final token =
+        payload['token'] ??
+        payload['accessToken'] ??
+        dataNode?['token'] ??
+        dataNode?['accessToken'];
     final user = userNode is Map
         ? Map<String, dynamic>.from(userNode)
         : dataNode is Map && dataNode['user'] is Map
-            ? Map<String, dynamic>.from(dataNode['user'] as Map)
-            : <String, dynamic>{};
+        ? Map<String, dynamic>.from(dataNode['user'] as Map)
+        : <String, dynamic>{};
 
     if (token == null || token.toString().trim().isEmpty) {
       return null;
