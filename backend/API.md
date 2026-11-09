@@ -165,8 +165,6 @@ Returns the latest terms and privacy policy:
 { "policies": [ { "type": "terms", "version": 1, "contentAr": "...", "contentEn": "...", "publishedAt": "..." } ] }
 ```
 
-<<<<<<< HEAD
-=======
 ## Catalog
 
 ### GET /catalog
@@ -328,6 +326,80 @@ Returns `{ "payoutAccount": { ... } }` or `{ "payoutAccount": null }`. Only the 
 - `method` is `bank_account` or `wallet`. `bankName` is needed for a bank, and for a wallet it can be the provider (`Vodafone Cash`).
 - A new account replaces the old one and waits for the admin again. Returns `201`.
 
+## Shipments
+
+Everything under `/shipments` needs a customer account. Others get `403` with `ROLE_REQUIRED`.
+
+Make the shipment, then add photos of the cargo. The shipment is a `draft` and can change.
+
+Every request below returns `{ "shipment": { ... } }`:
+
+```json
+{
+  "shipment": {
+    "id": "12", "status": "draft",
+    "cargoCategoryId": "1", "sizeOptionId": "3", "cargoDescription": "A sofa and 2 chairs", "itemCount": 3,
+    "isFragile": false, "weightKg": 120, "helpersCount": 1, "requestedVehicleTypeId": null,
+    "pickup": { "address": "...", "lat": 30.0444, "lng": 31.2357, "notes": "3rd floor", "zoneId": null },
+    "dropoff": { "address": "...", "lat": 30.0131, "lng": 31.2089, "notes": null, "zoneId": null },
+    "pickupType": "now", "pickupWindowStart": "...", "pickupWindowEnd": "...",
+    "routeDistanceM": 12012, "routeDurationS": 1730,
+    "paymentMethod": "cash", "farePaidBy": "sender", "recipient": { "name": "Mona", "phone": "+201012345678" },
+    "deliveryCode": "4821",
+    "createdAt": "...", "cancelledAt": null, "cancellationParty": null, "cancellationReason": null,
+    "photos": [ { "id": "5", "url": "https://...", "uploadedAt": "..." } ],
+    "timeline": [ { "from": null, "to": "draft", "by": "customer", "reason": null, "at": "..." } ]
+  }
+}
+```
+
+- `routeDistanceM` and `routeDurationS` are worked out by the server from the two points. Do not send them.
+- `deliveryCode` is shown to the customer only. The recipient tells it to the driver at the drop-off.
+- `url` opens the photo for 1 hour.
+
+### GET /shipments?status=active&page=1
+
+20 per page, newest first. `status` is `active` (searching, assigned or on the way), `draft`, `searching_driver`, `driver_assigned`, `in_progress`, `delivered` or `cancelled`. Returns `shipments` (short: id, status, addresses, `pickupWindowStart`), `page` and `hasMore`.
+
+### POST /shipments
+
+```json
+{
+  "cargoCategoryId": "1", "sizeOptionId": "3", "cargoDescription": "A sofa and 2 chairs", "itemCount": 3,
+  "isFragile": false, "weightKg": 120, "helpersCount": 1,
+  "pickup": { "address": "...", "lat": 30.0444, "lng": 31.2357, "notes": "3rd floor" },
+  "dropoff": { "address": "...", "lat": 30.0131, "lng": 31.2089 },
+  "pickupType": "scheduled", "pickupAt": "2026-11-20T09:30:00+02:00",
+  "paymentMethod": "cash", "farePaidBy": "recipient",
+  "recipientName": "Mona", "recipientPhone": "+201012345678"
+}
+```
+
+- Needed: `cargoCategoryId`, `cargoDescription`, `itemCount`, `pickup`, `dropoff`, `pickupType`, `paymentMethod`.
+- `sizeOptionId` must be one of the sizes of the category (from `GET /catalog`). `weightKg` and the size are used to choose the vehicles that fit.
+- `helpersCount` is 0 to 20. `requestedVehicleTypeId` is optional.
+- `pickupType` is `now` or `scheduled`. A scheduled pickup needs `pickupAt`, at least `minScheduleLeadMinutes` from now and at most 30 days. The driver comes within 1 hour from that time.
+- `paymentMethod` is `cash` or `wallet`. `farePaidBy` is `sender` (default) or `recipient`. The recipient can only pay cash, and then `recipientName` and `recipientPhone` are needed.
+- Pickup and drop-off must be at least 200 m apart.
+
+Returns `201`. Errors: `INVALID_INPUT`, `SAME_PLACE`
+
+### GET /shipments/:id
+
+### PATCH /shipments/:id
+
+Same fields, only what changes. Only a `draft`.
+
+Errors: `INVALID_INPUT`, `WRONG_STATUS`, `NOT_FOUND`
+
+### PUT /shipments/:id/photos
+
+The body is the photo itself, the same as the driver photos (`image/jpeg`, `image/png` or `image/webp`, at most 5 MB). At most 10 photos. Returns `201`.
+
+`DELETE /shipments/:id/photos/:photoId` removes one.
+
+Errors: `TOO_MANY_PHOTOS`, `INVALID_IMAGE`, `UNSUPPORTED_IMAGE`, `TOO_LARGE`, `STORAGE_FAILED`, `WRONG_STATUS`
+
 ## Admin
 
 Everything under `/admin` needs an admin account. Others get `403` with `ROLE_REQUIRED`.
@@ -461,7 +533,6 @@ A draft is not shown to anyone. After publishing, the text cannot change (make a
 
 Errors: `DRAFT_EXISTS` (only one draft per type, the error has its `id`), `ALREADY_PUBLISHED`
 
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 ## Too many tries
 
 Some endpoints have a limit. When it is reached they return `429` with `TOO_MANY_REQUESTS` and `retryAfter` in seconds.

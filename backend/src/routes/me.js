@@ -1,16 +1,10 @@
 import { Router } from 'express';
-<<<<<<< HEAD
-import { withTransaction } from '../db.js';
-import { requireAuth } from '../middleware/auth.js';
-import { loadProfile } from '../lib/users.js';
-=======
 import { query, withTransaction } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { loadProfile } from '../lib/users.js';
 import { bodyOf, readFields } from '../lib/fields.js';
 import { cleanChoice, cleanText, cleanOptionalText, invalid } from '../lib/validate.js';
 import { toPayoutAccount } from '../lib/payout.js';
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 
 const router = Router();
 
@@ -30,8 +24,6 @@ router.post('/accept-policies', requireAuth, async (req, res) => {
   res.json({ user: await loadProfile(req.user.id) });
 });
 
-<<<<<<< HEAD
-=======
 const payoutFields = {
   method: { column: 'method', clean: (v, f) => cleanChoice(v, f, ['bank_account', 'wallet']), required: true },
   holderName: { column: 'holder_name', clean: (v, f) => cleanText(v, f, 100), required: true },
@@ -75,5 +67,4 @@ router.put('/payout-account', requireAuth, async (req, res) => {
   res.status(201).json({ payoutAccount: await currentPayoutAccount(req.user.id) });
 });
 
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 export default router;
