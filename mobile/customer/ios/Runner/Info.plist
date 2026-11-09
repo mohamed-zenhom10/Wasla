@@ -66,5 +66,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Wasla uses your location to set pickup and drop-off points.</string>
 </dict>
 </plist>

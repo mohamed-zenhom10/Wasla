@@ -26,21 +26,26 @@ class AppPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const AppLogo(size: 38),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            title,
-            style: AppTypography.headingSm.copyWith(
-              fontSize: 25,
-              fontWeight: FontWeight.w800,
-              height: 1.15,
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: AppTypography.headingSm.copyWith(
+                  fontSize: 25,
+                  fontWeight: FontWeight.w800,
+                  height: 1.15,
+                ),
+              ),
             ),
-          ),
+            ?trailing,
+          ],
         ),
-        ?trailing,
       ],
     );
   }

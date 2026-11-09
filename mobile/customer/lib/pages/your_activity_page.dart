@@ -1,81 +1,101 @@
 import 'package:flutter/material.dart';
+import 'package:main/components/app_page_header.dart';
 import 'package:main/components/cargo_components.dart';
+import 'package:main/components/main_button.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class YourActivityPage extends StatelessWidget {
-  const YourActivityPage({
-    super.key,
-    this.savedOrder,
-    this.onDone,
-  });
+  const YourActivityPage({super.key, this.savedOrder, this.onDone});
 
   final CargoActivityItem? savedOrder;
   final VoidCallback? onDone;
 
+  void _handleDone(BuildContext context) {
+    if (onDone != null) {
+      onDone!.call();
+      return;
+    }
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = CargoOrderService.activity;
-    return CargoPageScaffold(
-      title: 'Your activity',
-      step: 0,
-      buttonText: 'Done',
-      onContinue: () {
-        if (onDone != null) {
-          onDone!.call();
-          return;
-        }
-        Navigator.of(context).pop();
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (savedOrder != null) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: const Color(0xFFEAF4EC),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
                 children: [
-                  Icon(Icons.check_circle_outline, color: AppColors.darkGreen),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Demo request saved on this device. No driver has been requested.',
-                      style: TextStyle(
-                        color: AppColors.darkGreen,
-                        fontSize: 13,
-                        height: 1.4,
+                  const AppPageHeader(title: 'Your Activity'),
+                  const SizedBox(height: 22),
+                  if (savedOrder != null) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(15),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEAF4EC),
+                        borderRadius: BorderRadius.circular(12),
                       ),
+                      child: const Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            color: AppColors.darkGreen,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Demo request saved on this device. No driver has been requested.',
+                              style: TextStyle(
+                                color: AppColors.darkGreen,
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                  ],
+                  const CargoSectionLabel('Recent moves'),
+                  if (items.isEmpty)
+                    const _EmptyActivity()
+                  else
+                    for (final item in items) ...[
+                      _ActivityCard(item: item),
+                      const SizedBox(height: 12),
+                    ],
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Activity shown here is sample data stored locally for this prototype.',
+                    style: TextStyle(
+                      color: AppColors.darkGreen,
+                      fontSize: 11,
+                      height: 1.4,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 22),
-          ],
-          const CargoSectionLabel('Recent moves'),
-          if (items.isEmpty)
-            const _EmptyActivity()
-          else
-            for (final item in items) ...[
-              _ActivityCard(item: item),
-              const SizedBox(height: 12),
-            ],
-          const SizedBox(height: 8),
-          const Text(
-            'Activity shown here is sample data stored locally for this prototype.',
-            style: TextStyle(
-              color: AppColors.darkGreen,
-              fontSize: 11,
-              height: 1.4,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+              child: WaslaButton(
+                text: 'Done',
+                variant: WaslaButtonVariant.primary,
+                onPressed: () => _handleDone(context),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -142,10 +162,7 @@ class _ActivityCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 9,
-                  vertical: 5,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEAF4EC),
                   borderRadius: BorderRadius.circular(20),

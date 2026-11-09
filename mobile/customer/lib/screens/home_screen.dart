@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:main/components/app_page_header.dart';
 import 'package:main/components/main_button.dart';
 import 'package:main/pages/cargo_category_page.dart';
+import 'package:main/pages/location_picker_page.dart';
 import 'package:main/pages/messages_page.dart';
 import 'package:main/pages/profile_page.dart';
 import 'package:main/pages/your_activity_page.dart';
@@ -31,6 +33,8 @@ class HomeScreenState extends State<HomeScreen> {
   final _destinationController = TextEditingController();
   int _selectedTab = 0;
   String? _customerName;
+  LatLng? _pickupPoint;
+  LatLng? _destinationPoint;
 
   @override
   void initState() {
@@ -69,6 +73,27 @@ class HomeScreenState extends State<HomeScreen> {
     _pickupController.dispose();
     _destinationController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickLocation({required bool isPickup}) async {
+    final result = await Navigator.of(context).push<PickedLocation>(
+      MaterialPageRoute(
+        builder: (_) => LocationPickerPage(
+          title: isPickup ? 'Pickup location' : 'Drop-off location',
+          initialPoint: isPickup ? _pickupPoint : _destinationPoint,
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      if (isPickup) {
+        _pickupController.text = result.address;
+        _pickupPoint = result.point;
+      } else {
+        _destinationController.text = result.address;
+        _destinationPoint = result.point;
+      }
+    });
   }
 
   void _requestMove() {
@@ -172,12 +197,14 @@ class HomeScreenState extends State<HomeScreen> {
                       controller: _pickupController,
                       icon: Icons.radio_button_checked,
                       hint: 'Pickup location',
+                      onTap: () => _pickLocation(isPickup: true),
                     ),
                     const Divider(height: 1),
                     _LocationInput(
                       controller: _destinationController,
                       icon: Icons.location_on_outlined,
                       hint: 'Where to?',
+                      onTap: () => _pickLocation(isPickup: false),
                     ),
                   ],
                 ),
@@ -301,11 +328,13 @@ class _LocationInput extends StatelessWidget {
     required this.controller,
     required this.icon,
     required this.hint,
+    required this.onTap,
   });
 
   final TextEditingController controller;
   final IconData icon;
   final String hint;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -316,6 +345,8 @@ class _LocationInput extends StatelessWidget {
         Expanded(
           child: TextField(
             controller: controller,
+            readOnly: true,
+            onTap: onTap,
             style: const TextStyle(color: AppColors.darkGreen, fontSize: 13),
             decoration: InputDecoration(
               hintText: hint,
@@ -324,6 +355,7 @@ class _LocationInput extends StatelessWidget {
             ),
           ),
         ),
+        const Icon(Icons.chevron_right, size: 18, color: AppColors.darkGreen),
       ],
     );
   }

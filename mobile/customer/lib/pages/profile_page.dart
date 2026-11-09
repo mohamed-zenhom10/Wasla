@@ -515,9 +515,9 @@ bool _isSensitiveKey(String key) =>
     key.contains('hash');
 
 bool _isExcludedProfileKey(String key) =>
-    key == 'role' ||
-    key == 'userrole' ||
+    key.contains('role') ||
     key == 'usertype' ||
+    key == 'accounttype' ||
     key.contains('language') ||
     key.contains('verified') ||
     (key.contains('needs') &&

@@ -29,6 +29,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   IsoCode _selectedPhoneCountry = IsoCode.EG;
   bool _acceptedTerms = false;
   bool _isSubmitting = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
@@ -100,6 +102,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return 'Enter a valid phone number for the selected country';
     }
     return null;
+  }
+
+  Widget _visibilityToggle({
+    required bool obscured,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: obscured ? 'Show password' : 'Hide password',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      icon: Icon(
+        obscured ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+        color: AppColors.darkGreen,
+        size: 20,
+      ),
+    );
   }
 
   @override
@@ -229,16 +248,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
               label: 'Password',
               controller: _passwordController,
               icon: Icons.lock_outline,
-              obscureText: true,
+              obscureText: _obscurePassword,
               textInputAction: TextInputAction.next,
               validator: _signUpPasswordValidator,
+              suffix: _visibilityToggle(
+                obscured: _obscurePassword,
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+              ),
             ),
             const SizedBox(height: 18),
             LabeledInput(
               label: 'Confirm password',
               controller: _confirmPasswordController,
               icon: Icons.lock_reset,
-              obscureText: true,
+              obscureText: _obscureConfirmPassword,
               textInputAction: TextInputAction.done,
               validator: (value) {
                 final confirm = (value ?? '').trim();
@@ -250,6 +274,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 }
                 return null;
               },
+              suffix: _visibilityToggle(
+                obscured: _obscureConfirmPassword,
+                onPressed: () => setState(
+                  () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             CheckboxListTile(
