@@ -31,12 +31,6 @@ class AuthPageScaffold extends StatelessWidget {
       resizeToAvoidBottomInset: true,
       backgroundColor: AppColors.white,
       body: SafeArea(
-<<<<<<< HEAD
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 24, 18),
-=======
         // Bottom inset is handled by the inner SafeArea around the button,
         // so don't apply it twice.
         bottom: false,
@@ -44,28 +38,11 @@ class AuthPageScaffold extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
               child: Row(
                 children: [
                   IconButton(
                     onPressed: () => Navigator.of(context).maybePop(),
                     tooltip: 'Back',
-<<<<<<< HEAD
-                    icon: const Icon(Icons.arrow_back),
-                  ),
-                  const Spacer(),
-                  Text(
-                    eyebrow.toUpperCase(),
-                    style: const TextStyle(
-                      color: AppColors.darkGreen,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  if (trailing != null) ...[
-                    const SizedBox(width: 12),
-                    trailing!,
-=======
                     icon: const Icon(Icons.arrow_back, size: 20),
                     constraints: const BoxConstraints(
                       minWidth: 40,
@@ -80,45 +57,11 @@ class AuthPageScaffold extends StatelessWidget {
                     const SizedBox(width: 12),
                     trailing!,
                     const SizedBox(width: 12),
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
                   ],
                 ],
               ),
             ),
             Expanded(
-<<<<<<< HEAD
-              child: SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: AppColors.darkGreen,
-                        fontSize: 27,
-                        height: 1.15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 18),
-                      Text(
-                        subtitle!,
-                        style: const TextStyle(
-                          color: AppColors.darkGreen,
-                          fontSize: 14,
-                          height: 1.45,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 18),
-                    content,
-                  ],
-                ),
-=======
               child: ListView(
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
@@ -133,20 +76,11 @@ class AuthPageScaffold extends StatelessWidget {
                   content,
                   const SizedBox(height: 16),
                 ],
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
               ),
             ),
             SafeArea(
               top: false,
               child: Padding(
-<<<<<<< HEAD
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-                child: MainButton(
-                  text: actionLabel,
-                  onPressed: onAction,
-                  isLoading: isLoading,
-                  borderRadius: 8,
-=======
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 16,
@@ -155,7 +89,6 @@ class AuthPageScaffold extends StatelessWidget {
                   text: actionLabel,
                   onPressed: isLoading ? null : onAction,
                   isLoading: isLoading,
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
                 ),
               ),
             ),
@@ -166,11 +99,7 @@ class AuthPageScaffold extends StatelessWidget {
   }
 }
 
-<<<<<<< HEAD
-class LabeledInput extends StatelessWidget {
-=======
 class LabeledInput extends StatefulWidget {
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   const LabeledInput({
     super.key,
     required this.label,
@@ -184,11 +113,8 @@ class LabeledInput extends StatefulWidget {
     this.inputFormatters,
     this.onChanged,
     this.textCapitalization = TextCapitalization.none,
-<<<<<<< HEAD
-=======
     this.focused = false,
     this.errorText,
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   });
 
   final String label;
@@ -203,65 +129,6 @@ class LabeledInput extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final TextCapitalization textCapitalization;
 
-<<<<<<< HEAD
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.darkGreen,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          validator: validator,
-          keyboardType: keyboardType,
-          textInputAction: textInputAction,
-          obscureText: obscureText,
-          inputFormatters: inputFormatters,
-          onChanged: onChanged,
-          textCapitalization: textCapitalization,
-          style: const TextStyle(color: AppColors.darkGreen, fontSize: 14),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: AppColors.light,
-            prefixIcon: icon == null
-                ? null
-                : Icon(icon, color: AppColors.darkGreen, size: 21),
-            suffixIcon: suffix,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 17,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(9),
-              borderSide: BorderSide.none,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(9),
-              borderSide: BorderSide.none,
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(9),
-              borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(9),
-              borderSide: const BorderSide(color: AppColors.accent),
-            ),
-            focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(9),
-              borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
-            ),
-          ),
-        ),
-=======
   /// Forces the focused look. Normally the field tracks its own focus.
   final bool focused;
   final String? errorText;
@@ -352,14 +219,11 @@ class _LabeledInputState extends State<LabeledInput> {
             style: AppTypography.bodySm.copyWith(color: _errorColor),
           ),
         ],
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
       ],
     );
   }
 }
 
-<<<<<<< HEAD
-=======
 final Color _errorColor = Colors.red.shade600;
 
 class _InputContainer extends StatelessWidget {
@@ -392,7 +256,6 @@ class _InputContainer extends StatelessWidget {
   }
 }
 
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 class NoticePanel extends StatelessWidget {
   const NoticePanel({super.key, required this.text, required this.icon});
 
@@ -403,11 +266,7 @@ class NoticePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-<<<<<<< HEAD
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
-=======
       padding: const EdgeInsets.all(16),
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
       decoration: BoxDecoration(
         color: AppColors.light,
         borderRadius: BorderRadius.circular(12),
@@ -417,20 +276,7 @@ class NoticePanel extends StatelessWidget {
         children: [
           Icon(icon, color: AppColors.darkGreen, size: 20),
           const SizedBox(width: 14),
-<<<<<<< HEAD
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: AppColors.darkGreen,
-                fontSize: 13,
-                height: 1.35,
-              ),
-            ),
-          ),
-=======
           Expanded(child: Text(text, style: AppTypography.bodySm)),
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
         ],
       ),
     );

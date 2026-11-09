@@ -32,24 +32,19 @@ dependencies:
     sdk: flutter
 
   shared_preferences: ^2.5.3
-<<<<<<< HEAD
-=======
   google_fonts: ^6.2.1
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-<<<<<<< HEAD
-=======
   http: ^1.6.0
   flutter_secure_storage: ^11.2.0
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: ^0.14.3
+  flutter_lints: ^6.0.0
 
 flutter_launcher_icons:
   android: "launcher_icon"
@@ -57,14 +52,6 @@ flutter_launcher_icons:
   image_path: "assets/icon/icon.png"
   min_sdk_android: 21 # ensure it matches your app's min sdk
   remove_alpha_ios: true # prevents app store rejection due to transparency issues
-
-  
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
-  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -76,8 +63,6 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-<<<<<<< HEAD
-=======
   fonts:
     - family: Poppins
       fonts:
@@ -96,15 +81,11 @@ flutter:
         - asset: assets/fonts/NotoSansArabic-Bold.ttf
           weight: 700
 
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/images/
     - assets/images/onboarding/
-<<<<<<< HEAD
-=======
     - assets/fonts/
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

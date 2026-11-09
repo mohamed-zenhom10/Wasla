@@ -74,39 +74,13 @@ void main() {
     expect(preferences.getBool('onboarding_completed'), isTrue);
   });
 
-<<<<<<< HEAD
-  testWidgets('phone verification opens an explicitly marked home preview', (
-=======
   testWidgets('email login screen shows the current email and password flow', (
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(const MaterialApp(home: WelcomeScreen()));
-<<<<<<< HEAD
-    await tester.tap(find.text('Continue with phone'));
-    await tester.pumpAndSettle();
-    expect(find.text('Your phone number'), findsOneWidget);
-
-    await tester.tap(find.text('Send verification code'));
-    await tester.pumpAndSettle();
-    expect(find.text('Check your messages'), findsOneWidget);
-
-    final otpFields = find.byType(TextField);
-    for (var index = 0; index < 6; index++) {
-      await tester.enterText(otpFields.at(index), '${index + 1}');
-    }
-    await tester.tap(find.text('Verify and continue'));
-    await tester.pumpAndSettle();
-    expect(find.text('Verification unavailable'), findsOneWidget);
-
-    await tester.tap(find.text('View home preview'));
-    await tester.pumpAndSettle();
-    expect(find.text('Morning, Mariam'), findsOneWidget);
-    expect(find.text('Preview only - not signed in'), findsOneWidget);
-=======
     await tester.tap(find.text('I already have an account'));
     await tester.pumpAndSettle();
 
@@ -123,7 +97,6 @@ void main() {
       find.text('Enter the email address linked to your account.'),
       findsOneWidget,
     );
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   });
 
   testWidgets('welcome account action navigates through login to sign up', (

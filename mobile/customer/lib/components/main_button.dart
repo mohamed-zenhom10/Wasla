@@ -1,52 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:main/theme/app_theme.dart';
 
-<<<<<<< HEAD
-class MainButton extends StatelessWidget {
-  final String text;
-  final VoidCallback? onPressed;
-  final double borderRadius;
-  final bool isLoading;
-
-  const MainButton({
-    super.key,
-    required this.text,
-    required this.onPressed,
-    this.borderRadius = 12,
-    this.isLoading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity, 
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.accent,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(borderRadius),
-          ),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-=======
 enum WaslaButtonVariant { primary, secondary, ghost, dark }
 
 class WaslaButton extends StatelessWidget {
@@ -122,13 +76,10 @@ class WaslaButton extends StatelessWidget {
                 children: [icon!, const SizedBox(width: 8), label],
               )
             : label,
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
       ),
     );
   }
 }
-<<<<<<< HEAD
-=======
 
 class MainButton extends WaslaButton {
   const MainButton({
@@ -142,4 +93,3 @@ class MainButton extends WaslaButton {
     super.height,
   });
 }
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a

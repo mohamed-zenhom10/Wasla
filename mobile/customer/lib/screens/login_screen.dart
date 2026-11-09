@@ -1,12 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:main/components/auth_components.dart';
-<<<<<<< HEAD
-import 'package:main/screens/otp_screen.dart';
-import 'package:main/screens/sign_up_screen.dart';
-import 'package:main/theme/app_theme.dart';
-
-=======
 import 'package:main/screens/home_screen.dart';
 import 'package:main/screens/sign_up_screen.dart';
 import 'package:main/services/auth_service.dart';
@@ -20,7 +14,6 @@ final RegExp _passwordRegex = RegExp(
   r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{8,}$',
 );
 
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -30,21 +23,6 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-<<<<<<< HEAD
-  final _phoneController = TextEditingController(text: '100 234 5678');
-
-  @override
-  void dispose() {
-    _phoneController.dispose();
-    super.dispose();
-  }
-
-  void _continue() {
-    if (!_formKey.currentState!.validate()) return;
-    final phone = '+20 ${_phoneController.text.trim()}';
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => OtpScreen(phoneNumber: phone)),
-=======
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
@@ -84,7 +62,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
     );
   }
 
@@ -93,39 +70,16 @@ class _LoginScreenState extends State<LoginScreen> {
     return AuthPageScaffold(
       eyebrow: 'Login',
       title: 'Welcome back',
-<<<<<<< HEAD
-      subtitle: "Sign in with your phone number. We'll send you a secure code.",
-      actionLabel: 'Continue',
-      onAction: _continue,
-=======
       subtitle: 'Sign in with your email and password.',
       actionLabel: 'Continue',
       onAction: _continue,
       isLoading: _isSubmitting,
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
       content: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             LabeledInput(
-<<<<<<< HEAD
-              label: 'Phone number',
-              controller: _phoneController,
-              icon: Icons.call_outlined,
-              keyboardType: TextInputType.phone,
-              textInputAction: TextInputAction.done,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9 ]')),
-                LengthLimitingTextInputFormatter(12),
-              ],
-              validator: _validateEgyptianPhone,
-            ),
-            const SizedBox(height: 16),
-            const NoticePanel(
-              icon: Icons.lock_outline,
-              text: 'Phone-first. No password to remember.',
-=======
               label: 'Email',
               controller: _emailController,
               icon: Icons.email_outlined,
@@ -176,7 +130,6 @@ class _LoginScreenState extends State<LoginScreen> {
             const NoticePanel(
               icon: Icons.lock_outline,
               text: 'Use your account email and password to continue.',
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
             ),
             const SizedBox(height: 24),
             Wrap(
@@ -214,12 +167,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-<<<<<<< HEAD
-String? _validateEgyptianPhone(String? value) {
-  final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
-  if (digits.length != 10 || !digits.startsWith('1')) {
-    return 'Enter a valid 10-digit Egyptian mobile number';
-=======
 class ForgotPasswordEmailScreen extends StatefulWidget {
   const ForgotPasswordEmailScreen({super.key});
 
@@ -672,7 +619,6 @@ String? _validatePassword(String? value) {
   }
   if (!_passwordRegex.hasMatch(password)) {
     return 'Use at least 8 characters, an uppercase letter, a lowercase letter, and a number';
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   }
   return null;
 }

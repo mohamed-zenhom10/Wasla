@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
-=======
 import 'package:google_fonts/google_fonts.dart';
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 
 class AppColors {
   static const light = Color(0xFFF1F1F1);
   static const darkGreen = Color(0xFF17281E);
   static const accent = Color(0xFFEA4227);
   static const white = Colors.white;
-<<<<<<< HEAD
-=======
   static const gray = Color(0xFFA7A8AC);
   static const borderLight = Color(0xFFE4E6E3);
   static const success = Color(0xFFEAF4EC);
@@ -139,7 +134,6 @@ class AppTypography {
     height: 1.45,
     color: AppColors.darkGreen,
   );
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 }
 
 class AppTheme {
@@ -155,10 +149,6 @@ class AppTheme {
       foregroundColor: AppColors.darkGreen,
       surfaceTintColor: AppColors.white,
     ),
-<<<<<<< HEAD
-  );
-}
-=======
     textTheme: TextTheme(
       displayLarge: AppTypography.display,
       headlineMedium: AppTypography.headingLg,
@@ -173,4 +163,3 @@ class AppTheme {
     ),
   );
 }
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a

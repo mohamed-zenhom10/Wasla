@@ -7,17 +7,6 @@ import 'package:main/screens/login_screen.dart';
 import 'package:main/theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
-<<<<<<< HEAD
-  const HomeScreen({super.key, this.isPreview = false});
-
-  final bool isPreview;
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-=======
   const HomeScreen({
     super.key,
     this.isPreview = false,
@@ -34,14 +23,11 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class HomeScreenState extends State<HomeScreen> {
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   final _pickupController = TextEditingController();
   final _destinationController = TextEditingController();
   int _selectedTab = 0;
 
   @override
-<<<<<<< HEAD
-=======
   void initState() {
     super.initState();
     _selectedTab = widget.initialTab.clamp(0, _tabNames.length - 1);
@@ -65,7 +51,6 @@ class HomeScreenState extends State<HomeScreen> {
   CargoActivityItem? _latestOrder;
 
   @override
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   void dispose() {
     _pickupController.dispose();
     _destinationController.dispose();
@@ -92,31 +77,18 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-<<<<<<< HEAD
-  void _openActivity() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const YourActivityPage()));
-=======
   void _handleTripsTap() {
     setTab(1);
   }
 
   void _goToHome() {
     setTab(0);
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
   }
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      body: SafeArea(
-=======
     final pages = <Widget>[
       SafeArea(
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
           child: Column(
@@ -259,8 +231,6 @@ class HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-<<<<<<< HEAD
-=======
       YourActivityPage(
         savedOrder: _latestOrder,
         onDone: () => setTab(0),
@@ -276,7 +246,6 @@ class HomeScreenState extends State<HomeScreen> {
         index: _selectedTab,
         children: pages,
       ),
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
       bottomNavigationBar: SafeArea(
         top: false,
         child: BottomNavigationBar(
@@ -287,24 +256,14 @@ class HomeScreenState extends State<HomeScreen> {
           selectedFontSize: 10,
           unselectedFontSize: 10,
           onTap: (index) {
-<<<<<<< HEAD
-            setState(() => _selectedTab = index);
-            if (index == 4 && widget.isPreview) {
-=======
             if (index == 4 && widget.isPreview) {
               setTab(index);
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
               Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const LoginScreen()),
               );
               return;
             }
             if (index == 1) {
-<<<<<<< HEAD
-              _openActivity();
-              return;
-            }
-=======
               _handleTripsTap();
               return;
             }
@@ -313,7 +272,6 @@ class HomeScreenState extends State<HomeScreen> {
               return;
             }
             setTab(index);
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
             if (index != 0) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -352,8 +310,6 @@ class HomeScreenState extends State<HomeScreen> {
 
 const _tabNames = ['Home', 'Trips', 'Messages', 'Wallet', 'Profile'];
 
-<<<<<<< HEAD
-=======
 class _PlaceholderTab extends StatelessWidget {
   const _PlaceholderTab({required this.label});
 
@@ -372,7 +328,6 @@ class _PlaceholderTab extends StatelessWidget {
   }
 }
 
->>>>>>> d781b645a8017bd6c14b7fd5c192cd82dd60251a
 class _LocationInput extends StatelessWidget {
   const _LocationInput({
     required this.controller,
