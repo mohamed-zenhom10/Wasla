@@ -5,8 +5,11 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:main/main.dart';
@@ -165,7 +168,7 @@ void main() {
 
     await tester.tap(find.text('Profile').first);
     await tester.pump();
-    expect(find.text('Profile'), findsNWidgets(2));
+    expect(find.text('Your account'), findsOneWidget);
     expect(tester.widget<BottomNavigationBar>(navigation).currentIndex, 4);
 
     await tester.tap(find.text('Trips').first);
@@ -179,4 +182,83 @@ void main() {
     expect(tester.widget<BottomNavigationBar>(navigation).currentIndex, 0);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'profile menu opens account pages and reuses Trips and Wallet tabs',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      FlutterSecureStorage.setMockInitialValues({
+        'wasla_auth_token': 'test-token',
+        'wasla_user_data': jsonEncode({
+          'fullName': 'Customer Example',
+          'phone': '+201060975860',
+          'email': 'customer@example.com',
+          'role': 'customer',
+          'language': 'en',
+          'needsPoliciesAcceptance': false,
+        }),
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(home: HomeScreen(isPreview: true, initialTab: 4)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Your account'), findsOneWidget);
+      expect(find.text('Customer Example'), findsOneWidget);
+      expect(find.text('customer'), findsNothing);
+      expect(find.text('en'), findsNothing);
+
+      await tester.tap(find.text('Personal information'));
+      await tester.pumpAndSettle();
+      expect(find.text('Personal information'), findsOneWidget);
+      expect(find.text('+201060975860'), findsOneWidget);
+      await tester.tap(find.byTooltip('Back to profile'));
+      await tester.pumpAndSettle();
+
+      const routes = <(String, String)>[
+        (
+          'Saved locations',
+          'No saved locations are available in your account.',
+        ),
+        ('Payment methods', 'No payment methods are available.'),
+        ('Notifications', 'No notifications yet'),
+        ('Safety', 'Every move, protected'),
+        ('Help Center', 'How can we help?'),
+        ('Language', 'Choose your language'),
+        ('Privacy', 'Your privacy'),
+        ('Terms', 'Terms of service'),
+      ];
+      for (final (menu, title) in routes) {
+        await tester.tap(find.text(menu).first);
+        await tester.pumpAndSettle();
+        expect(find.text(title), findsOneWidget);
+        await tester.tap(find.byTooltip('Back to profile'));
+        await tester.pumpAndSettle();
+      }
+
+      await tester.tap(find.text('Trips').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Recent moves'), findsOneWidget);
+      expect(
+        tester
+            .widget<BottomNavigationBar>(find.byType(BottomNavigationBar))
+            .currentIndex,
+        1,
+      );
+
+      await tester.tap(find.text('Profile'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Wallet').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Available balance'), findsOneWidget);
+      expect(
+        tester
+            .widget<BottomNavigationBar>(find.byType(BottomNavigationBar))
+            .currentIndex,
+        3,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

@@ -39,24 +39,28 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   flutter_secure_storage: ^11.2.0
+  image_picker: ^1.1.2
   country_code_picker: ^3.4.1
   phone_numbers_parser: ^9.0.29
+  geolocator: ^14.1.2
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
-  geolocator: ^14.1.2
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_launcher_icons: ^0.14.3
+  flutter_launcher_icons: ^0.14.4
   flutter_lints: ^6.0.0
 
 flutter_launcher_icons:
-  android: "launcher_icon"
+  android: true
   ios: true
   image_path: "assets/icon/icon.png"
-  min_sdk_android: 21 # ensure it matches your app's min sdk
-  remove_alpha_ios: true # prevents app store rejection due to transparency issues
+  remove_alpha_ios: true
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icon/icon.png"
+  web:
+    generate: true
+    image_path: "assets/icon/icon.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

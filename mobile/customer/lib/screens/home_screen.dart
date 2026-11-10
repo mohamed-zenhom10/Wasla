@@ -13,16 +13,10 @@ import 'package:main/services/cargo_order_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({
-    super.key,
-    this.isPreview = false,
-    this.initialTab = 0,
-    this.initialActivityOrder,
-  });
+  const HomeScreen({super.key, this.isPreview = false, this.initialTab = 0});
 
   final bool isPreview;
   final int initialTab;
-  final CargoActivityItem? initialActivityOrder;
 
   @override
   HomeScreenState createState() => HomeScreenState();
@@ -35,12 +29,12 @@ class HomeScreenState extends State<HomeScreen> {
   String? _customerName;
   LatLng? _pickupPoint;
   LatLng? _destinationPoint;
+  CargoOrderDraft? _activeBookingDraft;
 
   @override
   void initState() {
     super.initState();
     _selectedTab = widget.initialTab.clamp(0, _tabNames.length - 1);
-    _latestOrder = widget.initialActivityOrder;
     if (!widget.isPreview) _loadCustomerName();
   }
 
@@ -56,17 +50,6 @@ class HomeScreenState extends State<HomeScreen> {
       setState(() => _selectedTab = safeIndex);
     }
   }
-
-  void showTrips({CargoActivityItem? order}) {
-    setTab(1);
-    if (order != null) {
-      setState(() {
-        _latestOrder = order;
-      });
-    }
-  }
-
-  CargoActivityItem? _latestOrder;
 
   @override
   void dispose() {
@@ -97,20 +80,23 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   void _requestMove() {
-    if (_pickupController.text.trim().isEmpty ||
-        _destinationController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add a pickup and destination first.')),
-      );
-      return;
-    }
     _startOrder();
   }
 
-  void _startOrder() {
+  void _startOrder({bool useAiEstimate = false}) {
     final draft = CargoOrderDraft()
       ..pickup = _pickupController.text.trim()
-      ..destination = _destinationController.text.trim();
+      ..destination = _destinationController.text.trim()
+      ..useAiEstimate = useAiEstimate;
+    setState(() => _activeBookingDraft = draft);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
+    );
+  }
+
+  void _resumeOrder() {
+    final draft = _activeBookingDraft;
+    if (draft == null) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
     );
@@ -215,6 +201,15 @@ class HomeScreenState extends State<HomeScreen> {
                 onPressed: _requestMove,
                 borderRadius: 8,
               ),
+              if (_activeBookingDraft != null) ...[
+                const SizedBox(height: 8),
+                MainButton(
+                  text: 'Resume move',
+                  onPressed: _resumeOrder,
+                  variant: WaslaButtonVariant.secondary,
+                  borderRadius: 8,
+                ),
+              ],
               const SizedBox(height: 14),
               Container(
                 width: double.infinity,
@@ -245,7 +240,7 @@ class HomeScreenState extends State<HomeScreen> {
                       style: TextStyle(fontSize: 12),
                     ),
                     TextButton.icon(
-                      onPressed: _startOrder,
+                      onPressed: () => _startOrder(useAiEstimate: true),
                       style: TextButton.styleFrom(
                         foregroundColor: AppColors.darkGreen,
                         padding: const EdgeInsets.only(top: 8),
@@ -264,10 +259,10 @@ class HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      YourActivityPage(savedOrder: _latestOrder, onDone: () => setTab(0)),
+      YourActivityPage(isPreview: widget.isPreview, onDone: () => setTab(0)),
       const MessagesPage(),
       const WalletPage(),
-      ProfilePage(isActive: _selectedTab == 4),
+      ProfilePage(isActive: _selectedTab == 4, onNavigateToTab: setTab),
     ];
 
     return Scaffold(

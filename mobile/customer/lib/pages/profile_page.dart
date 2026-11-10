@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/app_page_header.dart';
 import 'package:main/components/main_button.dart';
+import 'package:main/pages/profile_subpages.dart';
 import 'package:main/screens/login_screen.dart';
 import 'package:main/screens/welcome_screen.dart';
 import 'package:main/services/auth_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key, this.isActive = false});
+  const ProfilePage({super.key, this.isActive = false, this.onNavigateToTab});
 
   final bool isActive;
+  final ValueChanged<int>? onNavigateToTab;
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -108,29 +110,23 @@ class _ProfilePageState extends State<ProfilePage> {
     final isAuthenticated = session != null && session.token.trim().isNotEmpty;
     final user = session?.user ?? const <String, dynamic>{};
     final name = _displayName(user);
-    final avatarUrl = _findValue(user, const [
-      'avatarUrl',
-      'profileImageUrl',
-      'profileImage',
-      'avatar',
-      'photoUrl',
-      'photo',
-      'imageUrl',
-    ]);
 
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
         children: [
           AppPageHeader(
-            title: 'Profile',
+            title: 'Your account',
             trailing: IconButton(
-              tooltip: 'Refresh profile',
-              onPressed: _isLoading ? null : _loadProfile,
-              icon: const Icon(Icons.refresh, color: AppColors.darkGreen),
+              tooltip: 'Notifications',
+              onPressed: () => _openSubpage(ProfileDestination.notifications),
+              icon: const Icon(
+                Icons.notifications_none,
+                color: AppColors.darkGreen,
+              ),
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 16),
           if (_isLoading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 48),
@@ -143,131 +139,65 @@ class _ProfilePageState extends State<ProfilePage> {
           else if (!isAuthenticated)
             _SignedOutProfile(onSignIn: _signIn)
           else ...[
-            _ProfileHeader(name: name, avatarUrl: avatarUrl),
-            const SizedBox(height: 28),
-            Text('Account information', style: AppTypography.headingSm),
-            const SizedBox(height: 12),
-            _ProfileDetails(fields: _profileFields(user)),
-            const SizedBox(height: 24),
-            WaslaButton(
-              text: 'Log out',
-              onPressed: _logout,
-              isLoading: _isLoggingOut,
-              variant: WaslaButtonVariant.secondary,
-              icon: const Icon(Icons.logout, size: 18),
+            _AccountSummary(
+              name: name,
+              phone: _findValue(user, const ['phone', 'phoneNumber']),
             ),
+            const SizedBox(height: 16),
+            for (final item in _profileMenu)
+              _AccountMenuItem(
+                icon: item.icon,
+                label: item.label,
+                isLoading: item.isLogout && _isLoggingOut,
+                onTap: () {
+                  if (item.tabIndex != null) {
+                    widget.onNavigateToTab?.call(item.tabIndex!);
+                  } else if (item.destination != null) {
+                    _openSubpage(item.destination!, user: user);
+                  } else if (item.isLogout) {
+                    _logout();
+                  }
+                },
+              ),
           ],
         ],
       ),
     );
   }
+
+  void _openSubpage(
+    ProfileDestination destination, {
+    Map<String, dynamic> user = const {},
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProfileSubpage(destination: destination, user: user),
+      ),
+    );
+  }
 }
 
-class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.name, required this.avatarUrl});
+class _AccountSummary extends StatelessWidget {
+  const _AccountSummary({required this.name, required this.phone});
 
   final String? name;
-  final String? avatarUrl;
+  final String? phone;
 
   @override
   Widget build(BuildContext context) {
-    final uri = avatarUrl == null ? null : Uri.tryParse(avatarUrl!);
-    final imageUrl =
-        uri != null &&
-            (uri.scheme == 'https' || uri.scheme == 'http') &&
-            uri.host.isNotEmpty
-        ? avatarUrl
-        : null;
-
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.light,
         borderRadius: BorderRadius.circular(AppRadius.lg),
       ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 34,
-            backgroundColor: AppColors.white,
-            child: imageUrl == null
-                ? const Icon(
-                    Icons.person_outline,
-                    color: AppColors.darkGreen,
-                    size: 34,
-                  )
-                : ClipOval(
-                    child: Image.network(
-                      imageUrl,
-                      width: 68,
-                      height: 68,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => const Icon(
-                        Icons.person_outline,
-                        color: AppColors.darkGreen,
-                        size: 34,
-                      ),
-                    ),
-                  ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (name != null)
-                  Text(name!, style: AppTypography.headingSm)
-                else
-                  Text('Customer profile', style: AppTypography.headingSm),
-                const SizedBox(height: 4),
-                Text(
-                  'Information from your account',
-                  style: AppTypography.bodyXs.copyWith(color: AppColors.gray),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProfileDetails extends StatelessWidget {
-  const _ProfileDetails({required this.fields});
-
-  final List<_ProfileField> fields;
-
-  @override
-  Widget build(BuildContext context) {
-    if (fields.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: AppColors.borderLight),
-        ),
-        child: Text(
-          'No profile details were included in the sign-in response.',
-          style: AppTypography.bodySm.copyWith(color: AppColors.gray),
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.borderLight),
-      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var index = 0; index < fields.length; index++) ...[
-            _ProfileDetailRow(field: fields[index]),
-            if (index != fields.length - 1)
-              const Divider(height: 1, indent: 16, endIndent: 16),
+          Text(name ?? 'Customer account', style: AppTypography.headingSm),
+          if (phone != null) ...[
+            const SizedBox(height: 4),
+            Text(phone!, style: AppTypography.bodyXs),
           ],
         ],
       ),
@@ -275,33 +205,43 @@ class _ProfileDetails extends StatelessWidget {
   }
 }
 
-class _ProfileDetailRow extends StatelessWidget {
-  const _ProfileDetailRow({required this.field});
+class _AccountMenuItem extends StatelessWidget {
+  const _AccountMenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isLoading = false,
+  });
 
-  final _ProfileField field;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 108,
-            child: Text(
-              field.label,
-              style: AppTypography.bodyXs.copyWith(color: AppColors.gray),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              field.value,
-              style: AppTypography.bodySm,
-              textAlign: TextAlign.end,
-            ),
-          ),
-        ],
+    return SizedBox(
+      height: 32,
+      child: InkWell(
+        onTap: isLoading ? null : onTap,
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.darkGreen, size: 20),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, style: AppTypography.bodySm)),
+            if (isLoading)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  color: AppColors.accent,
+                  strokeWidth: 2,
+                ),
+              )
+            else
+              const Text('·  ›', style: TextStyle(color: AppColors.darkGreen)),
+          ],
+        ),
       ),
     );
   }
@@ -383,13 +323,6 @@ class _ProfileMessage extends StatelessWidget {
   }
 }
 
-class _ProfileField {
-  const _ProfileField(this.label, this.value);
-
-  final String label;
-  final String value;
-}
-
 String? _displayName(Map<String, dynamic> user) {
   final name = _findValue(user, const ['fullName', 'name']);
   if (name != null) return name;
@@ -398,68 +331,6 @@ String? _displayName(Map<String, dynamic> user) {
   final last = _findValue(user, const ['lastName']);
   final combined = [first, last].whereType<String>().join(' ').trim();
   return combined.isEmpty ? null : combined;
-}
-
-List<_ProfileField> _profileFields(Map<String, dynamic> user) {
-  const knownFields = <(String, List<String>)>[
-    ('Full name', ['fullName', 'name']),
-    ('Email', ['email']),
-    ('Phone', ['phone', 'phoneNumber']),
-    ('Account ID', ['accountId', 'customerId', 'userId', '_id', 'id']),
-    ('Created', ['createdAt', 'created_at', 'createdOn']),
-  ];
-
-  final fields = <_ProfileField>[];
-  final claimed = <String>{};
-
-  for (final (label, aliases) in knownFields) {
-    final value = label == 'Full name'
-        ? _displayName(user)
-        : _findValue(user, aliases);
-    claimed.addAll(aliases.map(_normalizeKey));
-    if (label == 'Full name') {
-      claimed
-        ..add('firstname')
-        ..add('lastname');
-    }
-    if (value != null) fields.add(_ProfileField(label, value));
-  }
-
-  _appendAdditionalFields(user, fields, claimed, depth: 0);
-  return fields;
-}
-
-void _appendAdditionalFields(
-  Map<dynamic, dynamic> source,
-  List<_ProfileField> fields,
-  Set<String> claimed, {
-  required int depth,
-}) {
-  if (depth > 2) return;
-
-  for (final entry in source.entries) {
-    final key = entry.key.toString();
-    final normalizedKey = _normalizeKey(key);
-    if (_isSensitiveKey(normalizedKey) ||
-        _isExcludedProfileKey(normalizedKey) ||
-        _isAvatarKey(normalizedKey) ||
-        normalizedKey == '__v' ||
-        claimed.contains(normalizedKey)) {
-      continue;
-    }
-
-    final value = entry.value;
-    if (value is Map) {
-      _appendAdditionalFields(value, fields, claimed, depth: depth + 1);
-      continue;
-    }
-
-    final displayValue = _stringValue(value);
-    if (displayValue == null) continue;
-
-    claimed.add(normalizedKey);
-    fields.add(_ProfileField(_humanize(key), displayValue));
-  }
 }
 
 String? _findValue(Map<dynamic, dynamic> source, List<String> aliases) {
@@ -497,44 +368,73 @@ String? _stringValue(Object? value) {
 String _normalizeKey(String key) =>
     key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
-String _humanize(String key) {
-  final words = key
-      .replaceAll(RegExp(r'([a-z0-9])([A-Z])'), r'$1 $2')
-      .replaceAll(RegExp(r'[_\-]+'), ' ')
-      .trim();
-  if (words.isEmpty) return key;
-  return words[0].toUpperCase() + words.substring(1);
+const _profileMenu = <_ProfileMenuEntry>[
+  _ProfileMenuEntry(
+    Icons.person_outline,
+    'Personal information',
+    destination: ProfileDestination.personalInformation,
+  ),
+  _ProfileMenuEntry(
+    Icons.location_on_outlined,
+    'Saved locations',
+    destination: ProfileDestination.savedLocations,
+  ),
+  _ProfileMenuEntry(
+    Icons.credit_card_outlined,
+    'Payment methods',
+    destination: ProfileDestination.paymentMethods,
+  ),
+  _ProfileMenuEntry(
+    Icons.account_balance_wallet_outlined,
+    'Wallet',
+    tabIndex: 3,
+  ),
+  _ProfileMenuEntry(Icons.alt_route, 'Trips', tabIndex: 1),
+  _ProfileMenuEntry(
+    Icons.notifications_none,
+    'Notifications',
+    destination: ProfileDestination.notifications,
+  ),
+  _ProfileMenuEntry(
+    Icons.shield_outlined,
+    'Safety',
+    destination: ProfileDestination.safety,
+  ),
+  _ProfileMenuEntry(
+    Icons.help_outline,
+    'Help Center',
+    destination: ProfileDestination.helpCenter,
+  ),
+  _ProfileMenuEntry(
+    Icons.translate,
+    'Language',
+    destination: ProfileDestination.language,
+  ),
+  _ProfileMenuEntry(
+    Icons.lock_outline,
+    'Privacy',
+    destination: ProfileDestination.privacy,
+  ),
+  _ProfileMenuEntry(
+    Icons.description_outlined,
+    'Terms',
+    destination: ProfileDestination.terms,
+  ),
+  _ProfileMenuEntry(Icons.logout, 'Logout', isLogout: true),
+];
+
+class _ProfileMenuEntry {
+  const _ProfileMenuEntry(
+    this.icon,
+    this.label, {
+    this.destination,
+    this.tabIndex,
+    this.isLogout = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final ProfileDestination? destination;
+  final int? tabIndex;
+  final bool isLogout;
 }
-
-bool _isSensitiveKey(String key) =>
-    key.contains('password') ||
-    key.contains('token') ||
-    key.contains('secret') ||
-    key.contains('credential') ||
-    key.contains('salt') ||
-    key.contains('hash');
-
-bool _isExcludedProfileKey(String key) =>
-    key.contains('role') ||
-    key == 'usertype' ||
-    key == 'accounttype' ||
-    key.contains('language') ||
-    key.contains('verified') ||
-    (key.contains('needs') &&
-        key.contains('polic') &&
-        key.contains('accept')) ||
-    key.contains('needsacceptance') ||
-    key == 'acceptpolicies' ||
-    key == 'acceptedpolicies' ||
-    key == 'termsaccepted' ||
-    key == 'policiesaccepted';
-
-bool _isAvatarKey(String key) =>
-    key == 'avatar' ||
-    key.contains('avatarurl') ||
-    key.contains('profileimage') ||
-    key == 'photo' ||
-    key.contains('photourl') ||
-    key == 'image' ||
-    key.contains('imageurl') ||
-    key == 'picture';

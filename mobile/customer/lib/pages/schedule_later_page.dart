@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
 import 'package:main/pages/price_estimate_page.dart';
-import 'package:main/routing/app_route.dart';
+import 'package:main/services/cargo_order_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class ScheduleLaterPage extends StatefulWidget {
-  const ScheduleLaterPage({super.key});
+  const ScheduleLaterPage({super.key, required this.draft});
+
+  final CargoOrderDraft draft;
 
   @override
   State<ScheduleLaterPage> createState() => _ScheduleLaterPageState();
@@ -93,17 +95,11 @@ class _ScheduleLaterPageState extends State<ScheduleLaterPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Date', style: AppTypography.labelSm),
-                Text(
-                  _formatDate(_selectedDate),
-                  style: AppTypography.bodyMd,
-                ),
+                Text(_formatDate(_selectedDate), style: AppTypography.bodyMd),
               ],
             ),
           ),
-          TextButton(
-            onPressed: _pickDate,
-            child: const Text('Change'),
-          ),
+          TextButton(onPressed: _pickDate, child: const Text('Change')),
         ],
       ),
     );
@@ -133,10 +129,7 @@ class _ScheduleLaterPageState extends State<ScheduleLaterPage> {
               ],
             ),
           ),
-          TextButton(
-            onPressed: _pickTime,
-            child: const Text('Change'),
-          ),
+          TextButton(onPressed: _pickTime, child: const Text('Change')),
         ],
       ),
     );
@@ -163,15 +156,39 @@ class _ScheduleLaterPageState extends State<ScheduleLaterPage> {
       child: WaslaButton(
         text: 'Continue to price estimate',
         variant: WaslaButtonVariant.primary,
-        onPressed: () => Navigator.of(context).push(
-          TAMaterialRoute<void>(builder: (_) => const PriceEstimatePage()),
-        ),
+        onPressed: () {
+          widget.draft.scheduledAt = DateTime(
+            _selectedDate.year,
+            _selectedDate.month,
+            _selectedDate.day,
+            _selectedTime.hour,
+            _selectedTime.minute,
+          );
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => PriceEstimatePage(draft: widget.draft),
+            ),
+          );
+        },
       ),
     );
   }
 
   String _formatDate(DateTime date) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 

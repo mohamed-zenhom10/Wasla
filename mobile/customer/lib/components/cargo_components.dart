@@ -146,6 +146,7 @@ class CargoTextField extends StatelessWidget {
     this.maxLines = 1,
     this.keyboardType,
     this.validator,
+    this.errorText,
     this.textCapitalization = TextCapitalization.sentences,
   });
 
@@ -156,6 +157,7 @@ class CargoTextField extends StatelessWidget {
   final int maxLines;
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
+  final String? errorText;
   final TextCapitalization textCapitalization;
 
   @override
@@ -181,6 +183,7 @@ class CargoTextField extends StatelessWidget {
           style: const TextStyle(color: AppColors.darkGreen, fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
+            errorText: errorText,
             prefixIcon: icon == null ? null : Icon(icon, size: 20),
             filled: true,
             fillColor: AppColors.light,

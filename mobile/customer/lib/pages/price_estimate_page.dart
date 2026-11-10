@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
-import 'package:main/routing/app_route.dart';
-import 'package:main/services/mock_data.dart';
-import 'package:main/pages/booking_review_page.dart';
+import 'package:main/pages/smart_backhaul_page.dart';
+import 'package:main/services/cargo_order_service.dart';
 import 'package:main/theme/app_theme.dart';
 
-class PriceEstimatePage extends StatefulWidget {
-  const PriceEstimatePage({super.key});
+class PriceEstimatePage extends StatelessWidget {
+  const PriceEstimatePage({super.key, required this.draft});
 
-  @override
-  State<PriceEstimatePage> createState() => _PriceEstimatePageState();
-}
+  final CargoOrderDraft draft;
 
-class _PriceEstimatePageState extends State<PriceEstimatePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -21,165 +17,105 @@ class _PriceEstimatePageState extends State<PriceEstimatePage> {
         bottom: false,
         child: Column(
           children: [
-            _buildHeader(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    tooltip: 'Back',
+                    icon: const Icon(Icons.arrow_back, size: 24),
+                  ),
+                  const Spacer(),
+                  Text('WASLA', style: AppTypography.eyebrow),
+                  const SizedBox(width: 48),
+                ],
+              ),
+            ),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 children: [
-                  const SizedBox(height: 16),
-                  _buildPriceBadge(),
-                  const SizedBox(height: 16),
-                  _buildPriceCard(),
+                  const SizedBox(height: 32),
+                  const Icon(
+                    Icons.receipt_long_outlined,
+                    size: 56,
+                    color: AppColors.darkGreen,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Price estimate unavailable',
+                    style: AppTypography.headingSm,
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 12),
-                  _buildBreakdownCard(),
-                  const SizedBox(height: 12),
-                  _buildNoteCard(),
+                  Text(
+                    'Pricing is not connected, so no fare or fee breakdown can be calculated.',
+                    style: AppTypography.bodyMd,
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.light,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Current draft', style: AppTypography.labelSm),
+                        const SizedBox(height: 10),
+                        _DraftRow(
+                          label: 'Vehicle preference',
+                          value: draft.vehicleId ?? 'Not selected',
+                        ),
+                        _DraftRow(
+                          label: 'Schedule',
+                          value:
+                              draft.scheduledAt?.toLocal().toString() ??
+                              'Not selected',
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-            _buildActions(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: WaslaButton(
+                text: 'Continue without a price estimate',
+                variant: WaslaButtonVariant.primary,
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => SmartBackhaulPage(draft: draft),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildHeader() {
+class _DraftRow extends StatelessWidget {
+  const _DraftRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).maybePop(),
-            tooltip: 'Back',
-            icon: const Icon(Icons.arrow_back, size: 24),
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-          ),
-          const Spacer(),
-          Text('WASLA', style: AppTypography.eyebrow),
-          const SizedBox(width: 48),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPriceBadge() {
-    return Align(
-      alignment: Alignment.center,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.light,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          'Estimated price',
-          style: AppTypography.labelSm,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPriceCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        border: Border.all(color: AppColors.darkGreen, width: 2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Text(
-            AiEstimateMock.estimatedPrice,
-            style: AppTypography.headingSm.copyWith(
-              fontSize: 36,
-              fontWeight: FontWeight.w700,
-              color: AppColors.darkGreen,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Final price confirmed by driver',
-            style: AppTypography.bodyXs,
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBreakdownCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.light,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          _buildBreakdownRow(Icons.receipt_outlined, 'Base fare', AiEstimateMock.baseFare),
-          const SizedBox(height: 12),
-          _buildBreakdownRow(Icons.receipt_outlined, 'Distance', AiEstimateMock.distanceFee),
-          const SizedBox(height: 12),
-          _buildBreakdownRow(Icons.receipt_outlined, 'Tolls & fees', AiEstimateMock.tollsFee),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBreakdownRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, color: AppColors.darkGreen, size: 20),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(label, style: AppTypography.bodySm),
-        ),
-        Text(
-          value,
-          style: AppTypography.bodySm.copyWith(fontWeight: FontWeight.w500),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNoteCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.light,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        'Price may change based on actual route, traffic, and loading time. Driver will confirm before starting.',
-        style: AppTypography.bodyXs,
-      ),
-    );
-  }
-
-  Widget _buildActions() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Column(
-        children: [
-          WaslaButton(
-            text: 'Continue to booking review',
-            variant: WaslaButtonVariant.primary,
-            onPressed: () => Navigator.of(context).push(
-              TAMaterialRoute<void>(builder: (_) => const BookingReviewPage()),
-            ),
-          ),
-          const SizedBox(height: 8),
-          WaslaButton(
-            text: 'Back to schedule',
-            variant: WaslaButtonVariant.ghost,
-            onPressed: () => Navigator.of(context).maybePop(),
-          ),
+          SizedBox(width: 130, child: Text(label, style: AppTypography.bodyXs)),
+          Expanded(child: Text(value, style: AppTypography.bodySm)),
         ],
       ),
     );

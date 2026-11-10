@@ -56,9 +56,116 @@ class AuthResult {
       AuthResult(success: false, message: message);
 }
 
+class AuthenticatedApiException implements Exception {
+  const AuthenticatedApiException({
+    required this.code,
+    required this.message,
+    this.field,
+    this.statusCode,
+  });
+
+  final String code;
+  final String message;
+  final String? field;
+  final int? statusCode;
+
+  @override
+  String toString() => message;
+}
+
 class AuthService {
-  static const String _baseUrl = 'https://wasla-api-464a.onrender.com/api';
+  static const String apiBaseUrl = String.fromEnvironment(
+    'WASLA_API_URL',
+    defaultValue: 'https://wasla-api-464a.onrender.com/api',
+  );
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static http.Client _httpClient = http.Client();
+
+  static void replaceHttpClientForTesting(http.Client client) {
+    _httpClient = client;
+  }
+
+  static Uri apiUri(String endpoint, {Map<String, String>? query}) {
+    final baseUri = Uri.parse(apiBaseUrl);
+    return baseUri.replace(
+      path: '${baseUri.path}$endpoint',
+      queryParameters: query,
+    );
+  }
+
+  static Future<Map<String, dynamic>> apiRequest({
+    required String method,
+    required String endpoint,
+    Map<String, dynamic>? body,
+    List<int>? bytes,
+    String? contentType,
+    Map<String, String>? query,
+    bool authenticated = true,
+  }) async {
+    final request = http.Request(method, apiUri(endpoint, query: query));
+    request.headers['Accept'] = 'application/json';
+
+    if (authenticated) {
+      final token = await _secureStorage.read(key: 'wasla_auth_token');
+      if (token == null || token.trim().isEmpty) {
+        throw const AuthenticatedApiException(
+          code: 'UNAUTHENTICATED',
+          message: 'Please sign in with a Customer account to continue.',
+        );
+      }
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    if (bytes != null) {
+      request.headers['Content-Type'] =
+          contentType ?? 'application/octet-stream';
+      request.bodyBytes = bytes;
+    } else if (body != null) {
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode(body);
+    } else if (contentType != null) {
+      request.headers['Content-Type'] = contentType;
+    }
+
+    try {
+      final streamed = await _httpClient
+          .send(request)
+          .timeout(const Duration(seconds: 30));
+      final response = await http.Response.fromStream(streamed)
+          .timeout(const Duration(seconds: 30));
+      final decoded = _decodeBody(response.body);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final error = decoded['error'];
+        final errorMap = error is Map ? error : const <String, dynamic>{};
+        final code = errorMap['code']?.toString() ?? 'REQUEST_FAILED';
+        final message =
+            errorMap['message']?.toString() ??
+            'The request could not be completed.';
+        throw AuthenticatedApiException(
+          code: code,
+          field: errorMap['field']?.toString(),
+          message: response.statusCode == 403 && code == 'ROLE_REQUIRED'
+              ? 'A Customer account is required to manage shipments.'
+              : message,
+          statusCode: response.statusCode,
+        );
+      }
+      return decoded;
+    } on http.ClientException catch (error) {
+      throw AuthenticatedApiException(
+        code: 'NETWORK_ERROR',
+        message:
+            'Network error: ${error.message}. Please check your internet connection.',
+      );
+    } on FormatException catch (error) {
+      throw AuthenticatedApiException(
+        code: 'INVALID_RESPONSE',
+        message: 'The server returned an invalid response: ${error.message}',
+      );
+    } on AuthenticatedApiException {
+      rethrow;
+    }
+  }
 
   static Future<AuthResult> login({
     required String email,
@@ -177,12 +284,8 @@ class AuthService {
         headers['Authorization'] = 'Bearer $bearerToken';
       }
 
-      final response = await http
-          .post(
-            Uri.parse('$_baseUrl$endpoint'),
-            headers: headers,
-            body: jsonEncode(payload),
-          )
+      final response = await _httpClient
+          .post(apiUri(endpoint), headers: headers, body: jsonEncode(payload))
           .timeout(const Duration(seconds: 20));
 
       final decoded = _decodeBody(response.body);

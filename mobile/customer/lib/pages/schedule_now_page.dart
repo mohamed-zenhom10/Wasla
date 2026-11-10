@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
+import 'package:main/pages/schedule_later_page.dart';
 import 'package:main/pages/price_estimate_page.dart';
-import 'package:main/routing/app_route.dart';
+import 'package:main/services/cargo_order_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class ScheduleNowPage extends StatefulWidget {
-  const ScheduleNowPage({super.key});
+  const ScheduleNowPage({super.key, required this.draft});
+
+  final CargoOrderDraft draft;
 
   @override
   State<ScheduleNowPage> createState() => _ScheduleNowPageState();
@@ -93,17 +96,11 @@ class _ScheduleNowPageState extends State<ScheduleNowPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Date', style: AppTypography.labelSm),
-                Text(
-                  _formatDate(_selectedDate),
-                  style: AppTypography.bodyMd,
-                ),
+                Text(_formatDate(_selectedDate), style: AppTypography.bodyMd),
               ],
             ),
           ),
-          TextButton(
-            onPressed: _pickDate,
-            child: const Text('Change'),
-          ),
+          TextButton(onPressed: _pickDate, child: const Text('Change')),
         ],
       ),
     );
@@ -133,10 +130,7 @@ class _ScheduleNowPageState extends State<ScheduleNowPage> {
               ],
             ),
           ),
-          TextButton(
-            onPressed: _pickTime,
-            child: const Text('Change'),
-          ),
+          TextButton(onPressed: _pickTime, child: const Text('Change')),
         ],
       ),
     );
@@ -160,18 +154,59 @@ class _ScheduleNowPageState extends State<ScheduleNowPage> {
   Widget _buildActions() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: WaslaButton(
-        text: 'Continue to price estimate',
-        variant: WaslaButtonVariant.primary,
-        onPressed: () => Navigator.of(context).push(
-          TAMaterialRoute<void>(builder: (_) => const PriceEstimatePage()),
-        ),
+      child: Column(
+        children: [
+          WaslaButton(
+            text: 'Continue to price estimate',
+            variant: WaslaButtonVariant.primary,
+            onPressed: () {
+              _saveSchedule();
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => PriceEstimatePage(draft: widget.draft),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ScheduleLaterPage(draft: widget.draft),
+              ),
+            ),
+            child: const Text('Schedule for later'),
+          ),
+        ],
       ),
     );
   }
 
+  void _saveSchedule() {
+    widget.draft.scheduledAt = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
+    );
+  }
+
   String _formatDate(DateTime date) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 

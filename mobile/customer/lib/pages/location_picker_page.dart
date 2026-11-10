@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:main/components/main_button.dart';
 import 'package:main/theme/app_theme.dart';
 
@@ -16,10 +16,22 @@ class PickedLocation {
   final LatLng point;
 }
 
-class _PlaceResult {
-  const _PlaceResult(this.name, this.point);
+class _Suggestion {
+  const _Suggestion({
+    required this.title,
+    required this.subtitle,
+    required this.label,
+    required this.point,
+  });
 
-  final String name;
+  /// Main line shown in the results list (place name).
+  final String title;
+
+  /// Second line (area / city).
+  final String subtitle;
+
+  /// Text written in the field after selecting (name + area).
+  final String label;
   final LatLng point;
 }
 
@@ -31,9 +43,7 @@ class LocationException implements Exception {
 }
 
 class LocationService {
-  static const _headers = {'Accept': 'application/json'};
-  static const _host = 'nominatim.openstreetmap.org';
-
+  // ---------- Device location ----------
   static Future<LatLng> currentLatLng() async {
     final enabled = await Geolocator.isLocationServiceEnabled();
     if (!enabled) {
@@ -63,45 +73,164 @@ class LocationService {
     return LatLng(position.latitude, position.longitude);
   }
 
+  static String? _clean(dynamic value) {
+    if (value is! String) return null;
+    final text = value.trim();
+    return text.isEmpty ? null : text;
+  }
+
+  static String _join(Iterable<String?> parts, {int max = 3}) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final part in parts) {
+      if (part == null) continue;
+      if (seen.add(part.toLowerCase())) result.add(part);
+      if (result.length == max) break;
+    }
+    return result.join(', ');
+  }
+
+  // ---------- Search (Photon, OpenStreetMap data) ----------
+  static Future<List<_Suggestion>> search(String query, LatLng bias) async {
+    final uri = Uri.https('photon.komoot.io', '/api/', {
+      'q': query,
+      'limit': '8',
+      'lang': 'en',
+      'lat': '${bias.latitude}',
+      'lon': '${bias.longitude}',
+      // Egypt only: minLon,minLat,maxLon,maxLat
+      'bbox': '24.5,21.5,37.0,32.0',
+    });
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) return const [];
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final features = (data['features'] as List<dynamic>?) ?? const [];
+    final results = <_Suggestion>[];
+    final seenLabels = <String>{};
+
+    for (final item in features) {
+      final feature = item as Map<String, dynamic>;
+      final props = (feature['properties'] as Map<String, dynamic>?) ?? {};
+      final coords = (feature['geometry']?['coordinates'] as List<dynamic>?);
+      if (coords == null || coords.length < 2) continue;
+
+      final name = _clean(props['name']);
+      final street = _clean(props['street']);
+      final house = _clean(props['housenumber']);
+      final district = _clean(props['district']) ?? _clean(props['locality']);
+      final city = _clean(props['city']);
+      final state = _clean(props['state']);
+
+      final streetLine = street == null
+          ? null
+          : (house == null ? street : '$street $house');
+      final title = name ?? streetLine ?? district ?? city;
+      if (title == null) continue;
+
+      final subtitle = _join(
+        [
+          if (name != null) streetLine,
+          district,
+          city,
+          state,
+        ].where((part) => part != null && part != title),
+      );
+
+      final area = district ?? city;
+      final label = _join([title, area != title ? area : null], max: 2);
+      if (!seenLabels.add(label.toLowerCase())) continue;
+
+      results.add(
+        _Suggestion(
+          title: title,
+          subtitle: subtitle,
+          label: label,
+          point: LatLng(
+            (coords[1] as num).toDouble(),
+            (coords[0] as num).toDouble(),
+          ),
+        ),
+      );
+    }
+    return results;
+  }
+
+  // ---------- Reverse geocoding: always a name, never coordinates ----------
   static Future<String> reverse(LatLng point) async {
-    final uri = Uri.https(_host, '/reverse', {
+    try {
+      final name = await _nominatimReverse(point);
+      if (name.isNotEmpty) return name;
+    } catch (_) {}
+    try {
+      final name = await _photonReverse(point);
+      if (name.isNotEmpty) return name;
+    } catch (_) {}
+    return '';
+  }
+
+  static Future<String> _nominatimReverse(LatLng point) async {
+    final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
       'format': 'jsonv2',
       'lat': '${point.latitude}',
       'lon': '${point.longitude}',
+      'zoom': '18',
+      'addressdetails': '1',
       'accept-language': 'en',
     });
     final response = await http
-        .get(uri, headers: _headers)
+        .get(uri, headers: {'Accept': 'application/json'})
         .timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) throw Exception('Reverse failed');
+    if (response.statusCode != 200) return '';
+
     final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final name = (data['display_name'] as String?) ?? '';
-    return name.split(',').take(3).map((e) => e.trim()).join(', ');
+    final address = (data['address'] as Map<String, dynamic>?) ?? {};
+
+    final first =
+        _clean(data['name']) ??
+        _clean(address['road']) ??
+        _clean(address['pedestrian']) ??
+        _clean(address['amenity']);
+    final area =
+        _clean(address['suburb']) ??
+        _clean(address['neighbourhood']) ??
+        _clean(address['quarter']) ??
+        _clean(address['city_district']);
+    final city =
+        _clean(address['city']) ??
+        _clean(address['town']) ??
+        _clean(address['village']) ??
+        _clean(address['state']);
+
+    final built = _join([first, area, city]);
+    if (built.isNotEmpty) return built;
+
+    final display = _clean(data['display_name']);
+    if (display == null) return '';
+    return _join(display.split(',').map((part) => _clean(part)));
   }
 
-  static Future<List<_PlaceResult>> search(String query) async {
-    final uri = Uri.https(_host, '/search', {
-      'format': 'jsonv2',
-      'q': query,
-      'limit': '6',
-      'countrycodes': 'eg',
-      'accept-language': 'en',
+  static Future<String> _photonReverse(LatLng point) async {
+    final uri = Uri.https('photon.komoot.io', '/reverse', {
+      'lat': '${point.latitude}',
+      'lon': '${point.longitude}',
+      'lang': 'en',
     });
-    final response = await http
-        .get(uri, headers: _headers)
-        .timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) return const [];
-    final list = jsonDecode(response.body) as List<dynamic>;
-    return list.map((item) {
-      final map = item as Map<String, dynamic>;
-      return _PlaceResult(
-        (map['display_name'] as String).split(',').take(3).join(', ').trim(),
-        LatLng(
-          double.parse(map['lat'] as String),
-          double.parse(map['lon'] as String),
-        ),
-      );
-    }).toList();
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    if (response.statusCode != 200) return '';
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final features = (data['features'] as List<dynamic>?) ?? const [];
+    if (features.isEmpty) return '';
+    final props =
+        ((features.first as Map<String, dynamic>)['properties']
+            as Map<String, dynamic>?) ??
+        {};
+    return _join([
+      _clean(props['name']) ?? _clean(props['street']),
+      _clean(props['district']) ?? _clean(props['locality']),
+      _clean(props['city']) ?? _clean(props['state']),
+    ]);
   }
 }
 
@@ -127,7 +256,8 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   String _address = '';
   bool _loadingAddress = false;
   bool _locating = false;
-  List<_PlaceResult> _results = const [];
+  bool _searching = false;
+  List<_Suggestion> _suggestions = const [];
 
   @override
   void initState() {
@@ -148,6 +278,8 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     super.dispose();
   }
 
+  // Only user drags trigger a new address lookup. Moves caused by search or
+  // "my location" set the address themselves.
   void _onPositionChanged(MapCamera camera, bool hasGesture) {
     _center = camera.center;
     if (!hasGesture) return;
@@ -162,22 +294,12 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   Future<void> _reverseGeocode() async {
     final point = _center;
     if (mounted) setState(() => _loadingAddress = true);
-    try {
-      final address = await LocationService.reverse(point);
-      if (!mounted || point != _center) return;
-      setState(() {
-        _address = address.isEmpty ? 'Selected location' : address;
-        _loadingAddress = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _address =
-            '${point.latitude.toStringAsFixed(5)}, '
-            '${point.longitude.toStringAsFixed(5)}';
-        _loadingAddress = false;
-      });
-    }
+    final name = await LocationService.reverse(point);
+    if (!mounted || point != _center) return;
+    setState(() {
+      _address = name.isEmpty ? 'Selected location' : name;
+      _loadingAddress = false;
+    });
   }
 
   Future<void> _goToMyLocation({bool silent = false}) async {
@@ -213,26 +335,38 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
 
   void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
-    if (value.trim().length < 3) {
-      setState(() => _results = const []);
+    final query = value.trim();
+    if (query.length < 2) {
+      setState(() {
+        _suggestions = const [];
+        _searching = false;
+      });
       return;
     }
-    _searchDebounce = Timer(const Duration(milliseconds: 600), () async {
+    setState(() => _searching = true);
+    _searchDebounce = Timer(const Duration(milliseconds: 500), () async {
       try {
-        final results = await LocationService.search(value.trim());
-        if (mounted) setState(() => _results = results);
-      } catch (_) {}
+        final results = await LocationService.search(query, _center);
+        if (!mounted) return;
+        setState(() {
+          _suggestions = results;
+          _searching = false;
+        });
+      } catch (_) {
+        if (mounted) setState(() => _searching = false);
+      }
     });
   }
 
-  void _selectResult(_PlaceResult result) {
+  void _selectSuggestion(_Suggestion suggestion) {
     FocusScope.of(context).unfocus();
     _searchController.clear();
-    _center = result.point;
-    _mapController.move(result.point, 16);
+    _reverseDebounce?.cancel();
+    _center = suggestion.point;
+    _mapController.move(suggestion.point, 17);
     setState(() {
-      _results = const [];
-      _address = result.name;
+      _suggestions = const [];
+      _address = suggestion.label;
       _loadingAddress = false;
     });
   }
@@ -248,6 +382,8 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final hasQuery = _searchController.text.trim().length >= 2;
+
     return Scaffold(
       body: Stack(
         children: [
@@ -266,7 +402,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
             ],
           ),
 
-          // Center pin (the tip sits exactly on the map center)
+          // Center pin (its tip sits on the map center)
           const IgnorePointer(
             child: Center(
               child: Padding(
@@ -314,6 +450,18 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                             decoration: InputDecoration(
                               hintText: 'Search ${widget.title.toLowerCase()}',
                               prefixIcon: const Icon(Icons.search, size: 20),
+                              suffixIcon: _searching
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(14),
+                                      child: SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    )
+                                  : null,
                               border: InputBorder.none,
                               contentPadding: const EdgeInsets.symmetric(
                                 vertical: 14,
@@ -324,9 +472,10 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                       ),
                     ],
                   ),
-                  if (_results.isNotEmpty)
+                  if (_suggestions.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 8),
+                      constraints: const BoxConstraints(maxHeight: 320),
                       decoration: BoxDecoration(
                         color: AppColors.white,
                         borderRadius: BorderRadius.circular(12),
@@ -334,20 +483,49 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                           BoxShadow(blurRadius: 8, color: Color(0x22000000)),
                         ],
                       ),
-                      child: Column(
+                      child: ListView(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
                         children: [
-                          for (final result in _results)
+                          for (final suggestion in _suggestions)
                             ListTile(
                               dense: true,
                               leading: const Icon(Icons.place_outlined),
                               title: Text(
-                                result.name,
-                                maxLines: 2,
+                                suggestion.title,
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              onTap: () => _selectResult(result),
+                              subtitle: suggestion.subtitle.isEmpty
+                                  ? null
+                                  : Text(
+                                      suggestion.subtitle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                              onTap: () => _selectSuggestion(suggestion),
                             ),
                         ],
+                      ),
+                    )
+                  else if (hasQuery && !_searching)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: const [
+                          BoxShadow(blurRadius: 8, color: Color(0x22000000)),
+                        ],
+                      ),
+                      child: const Text(
+                        'No places found. Try another name.',
+                        style: TextStyle(
+                          color: AppColors.darkGreen,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                 ],

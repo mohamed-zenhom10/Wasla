@@ -1,12 +1,55 @@
+import 'dart:typed_data';
+
+import 'package:main/models/shipment.dart';
+
+class CargoPhotoDraft {
+  const CargoPhotoDraft({
+    required this.bytes,
+    required this.contentType,
+    required this.fileName,
+  });
+
+  final Uint8List bytes;
+  final String contentType;
+  final String fileName;
+}
+
 class CargoOrderDraft {
   String category = '';
+  String? categoryId;
+  String? sizeOptionId;
   String description = '';
   String pickup = '';
   String destination = '';
+  double? pickupLatitude;
+  double? pickupLongitude;
+  double? dropoffLatitude;
+  double? dropoffLongitude;
+  String pickupNotes = '';
+  String dropoffNotes = '';
   String size = 'Medium';
   String notes = '';
-  bool hasSamplePhoto = false;
+  int itemCount = 1;
+  bool isFragile = false;
+  double? weightKg;
+  int helpersCount = 0;
+  String pickupType = 'now';
+  String? vehicleId;
+  DateTime? scheduledAt;
+  String paymentMethod = 'cash';
+  String farePaidBy = 'sender';
+  String recipientName = '';
+  String recipientPhone = '';
+  bool? backhaulAccepted;
+  bool useAiEstimate = false;
+  ShipmentCatalog? catalog;
+  Shipment? shipment;
+  ShipmentQuote? selectedQuote;
+  final List<CargoPhotoDraft> photos = [];
+  final Map<String, String> fieldErrors = {};
   final List<String> stops = [];
+
+  bool get hasSamplePhoto => photos.isNotEmpty;
 }
 
 class CargoActivityItem {
@@ -30,41 +73,7 @@ class CargoActivityItem {
 class CargoOrderService {
   CargoOrderService._();
 
-  static final List<CargoActivityItem> _activity = [
-    const CargoActivityItem(
-      reference: 'W-2408',
-      title: 'Furniture delivery',
-      route: 'Nasr City  →  Maadi',
-      status: 'Completed',
-      dateLabel: 'Yesterday',
-    ),
-    const CargoActivityItem(
-      reference: 'W-2403',
-      title: 'Household appliances',
-      route: 'Heliopolis  →  New Cairo',
-      status: 'In transit',
-      dateLabel: 'Oct 18',
-    ),
-  ];
+  static final List<CargoActivityItem> _activity = [];
 
   static List<CargoActivityItem> get activity => List.unmodifiable(_activity);
-
-  static CargoActivityItem saveDemoOrder(CargoOrderDraft draft) {
-    final route = <String>[
-      draft.pickup,
-      ...draft.stops,
-      draft.destination,
-    ].join('  →  ');
-    final order = CargoActivityItem(
-      reference: 'W-${2500 + _activity.length}',
-      title: draft.description.trim().isEmpty
-          ? draft.category
-          : draft.description.trim(),
-      route: route,
-      status: 'Demo request saved',
-      dateLabel: 'Just now',
-    );
-    _activity.insert(0, order);
-    return order;
-  }
 }

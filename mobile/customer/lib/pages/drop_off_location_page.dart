@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:main/components/cargo_components.dart';
 import 'package:main/pages/cargo_details_page.dart';
+import 'package:main/pages/location_picker_page.dart';
 import 'package:main/pages/multi_stop_route_page.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/theme/app_theme.dart';
@@ -37,9 +39,25 @@ class _DropOffLocationPageState extends State<DropOffLocationPage> {
 
   void _continue() {
     if (!_formKey.currentState!.validate()) return;
+    if (widget.draft.pickupLatitude == null ||
+        widget.draft.pickupLongitude == null) {
+      widget.draft.fieldErrors['pickup'] =
+          'Select the pickup point on the map.';
+      setState(() {});
+      return;
+    }
+    if (widget.draft.dropoffLatitude == null ||
+        widget.draft.dropoffLongitude == null) {
+      widget.draft.fieldErrors['dropoff'] =
+          'Select the drop-off point on the map.';
+      setState(() {});
+      return;
+    }
     widget.draft
       ..pickup = _pickupController.text.trim()
       ..destination = _destinationController.text.trim();
+    widget.draft.fieldErrors.remove('pickup');
+    widget.draft.fieldErrors.remove('dropoff');
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => CargoDetailsPage(draft: widget.draft),
@@ -95,7 +113,24 @@ class _DropOffLocationPageState extends State<DropOffLocationPage> {
               controller: _pickupController,
               icon: Icons.radio_button_checked,
               validator: _validateLocation,
+              errorText: widget.draft.fieldErrors['pickup'],
             ),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(
+                onPressed: () => _pickLocation(isPickup: true),
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Choose pickup on map'),
+              ),
+            ),
+            if (widget.draft.fieldErrors['pickup'] case final error?)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  error,
+                  style: const TextStyle(color: AppColors.accent),
+                ),
+              ),
             const SizedBox(height: 18),
             CargoTextField(
               label: 'Drop-off location',
@@ -103,7 +138,24 @@ class _DropOffLocationPageState extends State<DropOffLocationPage> {
               controller: _destinationController,
               icon: Icons.location_on_outlined,
               validator: _validateLocation,
+              errorText: widget.draft.fieldErrors['dropoff'],
             ),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: TextButton.icon(
+                onPressed: () => _pickLocation(isPickup: false),
+                icon: const Icon(Icons.map_outlined),
+                label: const Text('Choose drop-off on map'),
+              ),
+            ),
+            if (widget.draft.fieldErrors['dropoff'] case final error?)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  error,
+                  style: const TextStyle(color: AppColors.accent),
+                ),
+              ),
             const SizedBox(height: 18),
             Container(
               width: double.infinity,
@@ -134,5 +186,42 @@ class _DropOffLocationPageState extends State<DropOffLocationPage> {
         ),
       ),
     );
+  }
+
+  Future<void> _pickLocation({required bool isPickup}) async {
+    final latitude = isPickup
+        ? widget.draft.pickupLatitude
+        : widget.draft.dropoffLatitude;
+    final longitude = isPickup
+        ? widget.draft.pickupLongitude
+        : widget.draft.dropoffLongitude;
+    final result = await Navigator.of(context).push<PickedLocation>(
+      MaterialPageRoute(
+        builder: (_) => LocationPickerPage(
+          title: isPickup ? 'Pickup location' : 'Drop-off location',
+          initialPoint: latitude == null || longitude == null
+              ? null
+              : LatLng(latitude, longitude),
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      if (isPickup) {
+        _pickupController.text = result.address;
+        widget.draft
+          ..pickup = result.address
+          ..pickupLatitude = result.point.latitude
+          ..pickupLongitude = result.point.longitude
+          ..fieldErrors.remove('pickup');
+      } else {
+        _destinationController.text = result.address;
+        widget.draft
+          ..destination = result.address
+          ..dropoffLatitude = result.point.latitude
+          ..dropoffLongitude = result.point.longitude
+          ..fieldErrors.remove('dropoff');
+      }
+    });
   }
 }
