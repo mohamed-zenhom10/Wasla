@@ -8,7 +8,7 @@ import {
   IMAGE_TYPES, MAX_IMAGE_MB, readImage, saveImage,
 } from '../lib/storage.js';
 import {
-  shipmentFields, stateOf, buildColumns, insertShipment, updateShipment, loadShipment, lockShipment,
+  shipmentFields, stateOf, buildColumns, insertShipment, updateShipment, priceShipment, loadShipment, lockShipment,
   requireDraft, toShipmentSummary, SUMMARY_SQL, STATUS_FILTERS,
 } from '../lib/shipments.js';
 
@@ -29,6 +29,18 @@ function baseUrl(req) {
 
 async function reply(req, res, id, status = 200) {
   res.status(status).json({ shipment: await loadShipment(id, baseUrl(req)) });
+}
+
+async function acceptedQuote(client, id) {
+  const { rows: [quote] } = await client.query(
+    "SELECT * FROM price_quotes WHERE shipment_id = $1 AND status = 'accepted'",
+    [id],
+  );
+  return quote;
+}
+
+function priceLocked() {
+  return new AppError(409, 'PRICE_ACCEPTED', 'The price was accepted, withdraw it first to change the shipment');
 }
 
 router.get('/', async (req, res) => {
@@ -75,6 +87,9 @@ router.patch('/:id', async (req, res) => {
   await withTransaction(actorOf(req), async (client) => {
     const row = await lockShipment(client, id, req.user.id);
     requireDraft(row);
+    if (await acceptedQuote(client, id)) {
+      throw priceLocked();
+    }
     const columns = await buildColumns(client, { ...stateOf(row), ...changes }, Object.keys(body));
     await updateShipment(client, id, columns);
   });
@@ -87,6 +102,9 @@ router.put('/:id/photos', imageBody, async (req, res) => {
   const check = async (client) => {
     const row = await lockShipment(client, id, req.user.id);
     requireDraft(row);
+    if (await acceptedQuote(client, id)) {
+      throw priceLocked();
+    }
     const { rows: [count] } = await client.query(
       'SELECT count(*)::int AS n FROM shipment_item_images WHERE shipment_id = $1',
       [id],
@@ -110,6 +128,9 @@ router.delete('/:id/photos/:photoId', async (req, res) => {
   await withTransaction(actorOf(req), async (client) => {
     const row = await lockShipment(client, id, req.user.id);
     requireDraft(row);
+    if (await acceptedQuote(client, id)) {
+      throw priceLocked();
+    }
     const { rowCount } = await client.query(
       'DELETE FROM shipment_item_images WHERE id = $1 AND shipment_id = $2 RETURNING id',
       [photoId, id],
@@ -117,6 +138,68 @@ router.delete('/:id/photos/:photoId', async (req, res) => {
     if (rowCount === 0) {
       throw new AppError(404, 'NOT_FOUND', 'Photo not found');
     }
+  });
+  await reply(req, res, id);
+});
+
+router.post('/:id/quotes', async (req, res) => {
+  const id = cleanId(req.params.id);
+  const recommended = await withTransaction(actorOf(req), async (client) => {
+    const row = await lockShipment(client, id, req.user.id);
+    requireDraft(row);
+    if (await acceptedQuote(client, id)) {
+      throw priceLocked();
+    }
+    return priceShipment(client, row);
+  });
+  res.status(201).json({ shipment: await loadShipment(id, baseUrl(req), recommended) });
+});
+
+router.post('/:id/quotes/:quoteId/accept', async (req, res) => {
+  const id = cleanId(req.params.id);
+  const quoteId = cleanId(req.params.quoteId);
+  await withTransaction(actorOf(req), async (client) => {
+    const row = await lockShipment(client, id, req.user.id);
+    requireDraft(row);
+    if (await acceptedQuote(client, id)) {
+      throw new AppError(409, 'PRICE_ACCEPTED', 'A price is already accepted for this shipment');
+    }
+    const { rows: [quote] } = await client.query(
+      `SELECT status, shipment_version, expires_at < now() AS expired
+       FROM price_quotes WHERE id = $1 AND shipment_id = $2`,
+      [quoteId, id],
+    );
+    if (!quote) {
+      throw new AppError(404, 'NOT_FOUND', 'Price not found');
+    }
+    if (quote.status !== 'offered') {
+      throw new AppError(409, 'QUOTE_NOT_AVAILABLE', `This price is ${quote.status}, ask for a new price`);
+    }
+    if (quote.expired) {
+      throw new AppError(409, 'QUOTE_EXPIRED', 'This price expired, ask for a new price');
+    }
+    if (quote.shipment_version !== row.details_version) {
+      throw new AppError(409, 'QUOTE_OUTDATED', 'The shipment changed after this price, ask for a new price');
+    }
+    await client.query("UPDATE price_quotes SET status = 'accepted' WHERE id = $1", [quoteId]);
+    await client.query(
+      "UPDATE price_quotes SET status = 'rejected' WHERE shipment_id = $1 AND status = 'offered'",
+      [id],
+    );
+  });
+  await reply(req, res, id);
+});
+
+router.post('/:id/withdraw-price', async (req, res) => {
+  const id = cleanId(req.params.id);
+  await withTransaction(actorOf(req), async (client) => {
+    const row = await lockShipment(client, id, req.user.id);
+    requireDraft(row);
+    const quote = await acceptedQuote(client, id);
+    if (!quote) {
+      throw new AppError(409, 'PRICE_NOT_ACCEPTED', 'No price is accepted for this shipment');
+    }
+    await client.query("UPDATE price_quotes SET status = 'withdrawn' WHERE id = $1", [quote.id]);
   });
   await reply(req, res, id);
 });

@@ -8,6 +8,7 @@ import {
   cleanCoordinate, cleanPhone,
 } from './validate.js';
 
+const QUOTE_MINUTES = 15;
 const WINDOW_MINUTES = 60;
 const MAX_SCHEDULE_DAYS = 30;
 
@@ -210,6 +211,105 @@ export async function updateShipment(client, id, columns) {
   );
 }
 
+const cents = (money) => Math.round(Number(money) * 100);
+const money = (value) => (value / 100).toFixed(2);
+
+export async function priceShipment(client, shipment) {
+  const { rows: [photos] } = await client.query(
+    'SELECT count(*)::int AS n FROM shipment_item_images WHERE shipment_id = $1',
+    [shipment.id],
+  );
+  if (photos.n === 0) {
+    throw new AppError(400, 'PHOTO_REQUIRED', 'Add at least one photo of the cargo before pricing');
+  }
+
+  let version = shipment.details_version;
+  if (shipment.pickup_type === 'now') {
+    const { rows: [row] } = await client.query(
+      `UPDATE shipments SET pickup_window_start = now(), pickup_window_end = now() + make_interval(mins => $2)
+       WHERE id = $1 RETURNING details_version`,
+      [shipment.id, WINDOW_MINUTES],
+    );
+    version = row.details_version;
+  } else {
+    const { rows: [settings] } = await client.query(
+      'SELECT min_schedule_lead_minutes FROM platform_settings WHERE id = 1',
+    );
+    const earliest = Date.now() + settings.min_schedule_lead_minutes * 60000;
+    if (new Date(shipment.pickup_window_start).getTime() < earliest) {
+      throw new AppError(400, 'SCHEDULE_TOO_SOON', 'The pickup time is too close now, choose a later time', {
+        field: 'pickupAt',
+      });
+    }
+  }
+
+  const { rows: [size] } = await client.query(
+    'SELECT approx_volume_m3 FROM cargo_size_options WHERE id = $1',
+    [shipment.size_option_id],
+  );
+  const { rows: types } = await client.query(
+    `SELECT * FROM vehicle_types
+     WHERE is_active
+       AND ($1::numeric IS NULL OR max_payload_kg >= $1)
+       AND ($2::numeric IS NULL OR cargo_volume_m3 >= $2)
+     ORDER BY max_payload_kg, id`,
+    [shipment.weight_kg, size ? size.approx_volume_m3 : null],
+  );
+  if (types.length === 0) {
+    throw new AppError(400, 'NO_VEHICLE_FITS', 'No vehicle can carry this cargo, check the weight and size');
+  }
+
+  await client.query(
+    "UPDATE price_quotes SET status = 'expired' WHERE shipment_id = $1 AND status = 'offered'",
+    [shipment.id],
+  );
+
+  for (const type of types) {
+    const distance = Math.round((cents(type.per_km_rate) * shipment.route_distance_m) / 1000);
+    const transport = cents(type.base_fare) + distance;
+    const helpers = shipment.helpers_count * cents(type.helper_fee);
+    const details = {
+      method: 'rules',
+      distanceKm: Number((shipment.route_distance_m / 1000).toFixed(1)),
+      baseFare: type.base_fare,
+      perKmRate: type.per_km_rate,
+      helpersCount: shipment.helpers_count,
+      helperFee: type.helper_fee,
+    };
+    await client.query(
+      `INSERT INTO price_quotes (shipment_id, vehicle_type_id, pricing_details, pricing_source,
+         standard_amount, transport_amount, helpers_count, helper_fee, helpers_amount, amount, customer_amount,
+         shipment_version, expires_at)
+       VALUES ($1, $2, $3::jsonb, 'rules', $4, $4, $5, $6, $7, $8, $8, $9, now() + make_interval(mins => $10))`,
+      [shipment.id, type.id, JSON.stringify(details), money(transport), shipment.helpers_count, type.helper_fee,
+        money(helpers), money(transport + helpers), version, QUOTE_MINUTES],
+    );
+  }
+  return types[0].id;
+}
+
+function toQuote(row, recommendedId) {
+  return {
+    id: row.id,
+    vehicleTypeId: row.vehicle_type_id,
+    status: row.status,
+    recommended: row.vehicle_type_id === recommendedId,
+    transportAmount: row.transport_amount,
+    helpersCount: row.helpers_count,
+    helperFee: row.helper_fee,
+    helpersAmount: row.helpers_amount,
+    returnDiscountAmount: row.return_discount_amount,
+    groupDiscountAmount: row.group_discount_amount,
+    couponDiscountAmount: row.coupon_discount_amount,
+    amount: row.amount,
+    customerAmount: row.customer_amount,
+    pricingSource: row.pricing_source,
+    pricingDetails: row.pricing_details,
+    expiresAt: row.expires_at,
+    acceptedAt: row.accepted_at,
+  };
+}
+
 function toPlace(row, prefix) {
   return {
     address: row[`${prefix}_address`],
@@ -230,11 +330,15 @@ export function toShipmentSummary(row) {
     dropoffAddress: row.dropoff_address,
     pickupType: row.pickup_type,
     pickupWindowStart: row.pickup_window_start,
+    vehicleTypeId: row.accepted_vehicle_type_id,
+    customerAmount: row.accepted_customer_amount,
     createdAt: row.created_at,
   };
 }
 
-export const SUMMARY_SQL = 'SELECT s.* FROM shipments s';
+export const SUMMARY_SQL = `SELECT s.*,
+    q.vehicle_type_id AS accepted_vehicle_type_id, q.customer_amount AS accepted_customer_amount
+  FROM shipments s LEFT JOIN price_quotes q ON q.shipment_id = s.id AND q.status = 'accepted'`;
 
 export const STATUS_FILTERS = {
   active: ['searching_driver', 'driver_assigned', 'in_progress'],
@@ -246,10 +350,16 @@ export const STATUS_FILTERS = {
   cancelled: ['cancelled'],
 };
 
-export async function loadShipment(id, baseUrl) {
+export async function loadShipment(id, baseUrl, recommendedId) {
   const { rows: [row] } = await query(`SELECT ${SHIPMENT_COLUMNS} FROM shipments s WHERE s.id = $1`, [id]);
-  const [photos, history] = await Promise.all([
+  const [photos, quotes, history] = await Promise.all([
     query('SELECT id, storage_key, uploaded_at FROM shipment_item_images WHERE shipment_id = $1 ORDER BY id', [id]),
+    query(
+      `SELECT * FROM price_quotes WHERE shipment_id = $1
+         AND (status = 'accepted' OR (status = 'offered' AND expires_at > now() AND shipment_version = $2))
+       ORDER BY amount, id`,
+      [id, row.details_version],
+    ),
     query(
       `SELECT from_status, to_status, change_source, reason, created_at
        FROM shipment_status_history WHERE shipment_id = $1 ORDER BY id`,
@@ -257,6 +367,18 @@ export async function loadShipment(id, baseUrl) {
     ),
   ]);
 
+  let recommended = recommendedId;
+  if (recommended === undefined && quotes.rows.length > 0) {
+    const offered = quotes.rows.filter((q) => q.status === 'offered');
+    const { rows: [smallest] } = offered.length ? await query(
+      `SELECT id FROM vehicle_types WHERE id = ANY(string_to_array($1, ',')::bigint[])
+       ORDER BY max_payload_kg, id LIMIT 1`,
+      [offered.map((q) => q.vehicle_type_id).join(',')],
+    ) : { rows: [] };
+    recommended = smallest ? smallest.id : null;
+  }
+
+  const accepted = quotes.rows.find((q) => q.status === 'accepted');
   return {
     id: row.id,
     status: row.status,
@@ -286,6 +408,8 @@ export async function loadShipment(id, baseUrl) {
     photos: photos.rows.map((p) => ({
       id: p.id, url: imageUrl(p.storage_key, baseUrl), uploadedAt: p.uploaded_at,
     })),
+    acceptedQuote: accepted ? toQuote(accepted, null) : null,
+    quotes: quotes.rows.filter((q) => q.status === 'offered').map((q) => toQuote(q, recommended)),
     timeline: history.rows.map((h) => ({
       from: h.from_status, to: h.to_status, by: h.change_source, reason: h.reason, at: h.created_at,
     })),

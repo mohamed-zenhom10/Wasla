@@ -330,7 +330,7 @@ Returns `{ "payoutAccount": { ... } }` or `{ "payoutAccount": null }`. Only the 
 
 Everything under `/shipments` needs a customer account. Others get `403` with `ROLE_REQUIRED`.
 
-Make the shipment, then add photos of the cargo. The shipment is a `draft` and can change.
+The steps: make the shipment, add photos of the cargo, ask for prices, then accept one. The shipment is a `draft` and can change until a price is accepted.
 
 Every request below returns `{ "shipment": { ... } }`:
 
@@ -348,6 +348,14 @@ Every request below returns `{ "shipment": { ... } }`:
     "deliveryCode": "4821",
     "createdAt": "...", "cancelledAt": null, "cancellationParty": null, "cancellationReason": null,
     "photos": [ { "id": "5", "url": "https://...", "uploadedAt": "..." } ],
+    "quotes": [
+      { "id": "30", "vehicleTypeId": "2", "status": "offered", "recommended": true,
+        "transportAmount": "580.18", "helpersCount": 1, "helperFee": "50.00", "helpersAmount": "50.00",
+        "returnDiscountAmount": "0.00", "groupDiscountAmount": "0.00", "couponDiscountAmount": "0.00",
+        "amount": "630.18", "customerAmount": "630.18", "pricingSource": "rules", "pricingDetails": { },
+        "expiresAt": "...", "acceptedAt": null }
+    ],
+    "acceptedQuote": null,
     "timeline": [ { "from": null, "to": "draft", "by": "customer", "reason": null, "at": "..." } ]
   }
 }
@@ -355,11 +363,12 @@ Every request below returns `{ "shipment": { ... } }`:
 
 - `routeDistanceM` and `routeDurationS` are worked out by the server from the two points. Do not send them.
 - `deliveryCode` is shown to the customer only. The recipient tells it to the driver at the drop-off.
+- `quotes` has only the prices that can still be accepted. `customerAmount` is what the customer pays.
 - `url` opens the photo for 1 hour.
 
 ### GET /shipments?status=active&page=1
 
-20 per page, newest first. `status` is `active` (searching, assigned or on the way), `draft`, `searching_driver`, `driver_assigned`, `in_progress`, `delivered` or `cancelled`. Returns `shipments` (short: id, status, addresses, `pickupWindowStart`), `page` and `hasMore`.
+20 per page, newest first. `status` is `active` (searching, assigned or on the way), `draft`, `searching_driver`, `driver_assigned`, `in_progress`, `delivered` or `cancelled`. Returns `shipments` (short: id, status, addresses, `pickupWindowStart`, `vehicleTypeId` and `customerAmount` of the accepted price), `page` and `hasMore`.
 
 ### POST /shipments
 
@@ -388,9 +397,9 @@ Returns `201`. Errors: `INVALID_INPUT`, `SAME_PLACE`
 
 ### PATCH /shipments/:id
 
-Same fields, only what changes. Only a `draft`.
+Same fields, only what changes. Only a `draft`, and not after a price is accepted. A change makes the old prices useless, ask for new ones.
 
-Errors: `INVALID_INPUT`, `WRONG_STATUS`, `NOT_FOUND`
+Errors: `INVALID_INPUT`, `WRONG_STATUS`, `PRICE_ACCEPTED` (withdraw the price first), `NOT_FOUND`
 
 ### PUT /shipments/:id/photos
 
@@ -398,7 +407,27 @@ The body is the photo itself, the same as the driver photos (`image/jpeg`, `imag
 
 `DELETE /shipments/:id/photos/:photoId` removes one.
 
-Errors: `TOO_MANY_PHOTOS`, `INVALID_IMAGE`, `UNSUPPORTED_IMAGE`, `TOO_LARGE`, `STORAGE_FAILED`, `WRONG_STATUS`
+Errors: `TOO_MANY_PHOTOS`, `INVALID_IMAGE`, `UNSUPPORTED_IMAGE`, `TOO_LARGE`, `STORAGE_FAILED`, `PRICE_ACCEPTED`, `WRONG_STATUS`
+
+### POST /shipments/:id/quotes
+
+No body. Makes one price for every vehicle type that can carry the cargo. The smallest one has `recommended: true`. A price is valid for 15 minutes, and asking again replaces the old prices. Returns `201`.
+
+For a `now` pickup the pickup time starts again from now.
+
+Errors: `PHOTO_REQUIRED` (add a photo first), `NO_VEHICLE_FITS`, `SCHEDULE_TOO_SOON` (the scheduled time is too close now, change `pickupAt`), `PRICE_ACCEPTED`
+
+### POST /shipments/:id/quotes/:quoteId/accept
+
+No body. The other prices become `rejected`, and the shipment cannot change until the price is withdrawn.
+
+Errors: `QUOTE_EXPIRED`, `QUOTE_OUTDATED` (the shipment changed after this price), `QUOTE_NOT_AVAILABLE`, `PRICE_ACCEPTED`, `NOT_FOUND`
+
+### POST /shipments/:id/withdraw-price
+
+No body. Cancels the accepted price, so the shipment can change again. Ask for new prices after that.
+
+Errors: `PRICE_NOT_ACCEPTED`
 
 ## Admin
 
