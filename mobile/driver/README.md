@@ -21,6 +21,12 @@ backend. When request endpoints are available, use
 `https://wasla-api-464a.onrender.com/api` and a request timeout of at least
 60 seconds for the free server's cold start.
 
+The driver trip preview continues from an accepted request through pickup,
+cargo loading, and delivery confirmation. Completing a delivery shows a short
+success animation and returns to the requests list. Trip status, proof of
+delivery, and payment confirmation are local preview state; they are not sent
+to the backend.
+
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.

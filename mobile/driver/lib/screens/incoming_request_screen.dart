@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:driver/components/driver_components.dart';
+import 'package:driver/screens/arriving_screen.dart';
 import 'package:driver/screens/driver_home_screen.dart';
 import 'package:driver/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -119,6 +120,13 @@ class _IncomingRequestScreenState extends State<IncomingRequestScreen> {
   }
 
   void _showPreviewNotice(BuildContext context, String action) {
+    if (action == 'accept') {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const ArrivingScreen()),
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(

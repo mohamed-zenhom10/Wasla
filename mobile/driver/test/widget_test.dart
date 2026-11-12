@@ -93,6 +93,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('accepted request completes trip and returns to requests', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(const MaterialApp(home: IncomingRequestScreen()));
+    await tester.tap(find.text('Accept request'));
+    await tester.pumpAndSettle();
+    expect(find.text('Navigate to pickup'), findsOneWidget);
+
+    await tester.tap(find.text("I've arrived"));
+    await tester.pumpAndSettle();
+    expect(find.text('Ready to start the trip'), findsOneWidget);
+
+    await tester.tap(find.text('Start trip'));
+    await tester.pumpAndSettle();
+    expect(find.text('Confirm a safe delivery'), findsOneWidget);
+
+    await tester.tap(find.text('Complete delivery'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delivery complete!'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 2200));
+    await tester.pumpAndSettle();
+    expect(find.text('Requests near you'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   test('application parser reads nested vehicle documents', () {
     final application = DriverApplication.fromJson({
       'application': {
