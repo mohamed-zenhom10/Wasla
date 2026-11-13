@@ -3,7 +3,7 @@ import { query, withTransaction } from '../db.js';
 import { AppError } from '../errors.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { bodyOf, readFields } from '../lib/fields.js';
-import { cleanId, cleanChoice, cleanInteger } from '../lib/validate.js';
+import { cleanId, cleanChoice, cleanInteger, cleanOptionalText } from '../lib/validate.js';
 import {
   IMAGE_TYPES, MAX_IMAGE_MB, readImage, saveImage,
 } from '../lib/storage.js';
@@ -200,6 +200,58 @@ router.post('/:id/withdraw-price', async (req, res) => {
       throw new AppError(409, 'PRICE_NOT_ACCEPTED', 'No price is accepted for this shipment');
     }
     await client.query("UPDATE price_quotes SET status = 'withdrawn' WHERE id = $1", [quote.id]);
+  });
+  await reply(req, res, id);
+});
+
+router.post('/:id/request', async (req, res) => {
+  const id = cleanId(req.params.id);
+  await withTransaction(actorOf(req), async (client) => {
+    const row = await lockShipment(client, id, req.user.id);
+    requireDraft(row);
+    const quote = await acceptedQuote(client, id);
+    if (!quote) {
+      throw new AppError(409, 'PRICE_NOT_ACCEPTED', 'Accept a price first');
+    }
+    if (new Date(row.pickup_window_end).getTime() < Date.now()) {
+      throw new AppError(409, 'PRICE_TOO_OLD', 'The pickup time passed, withdraw the price and ask for a new one');
+    }
+    const { rows: [customer] } = await client.query(
+      `SELECT accepted_latest_policies($1) AS policies, customer_balance($1) AS balance,
+              customer_available_balance($1) AS available`,
+      [req.user.id],
+    );
+    if (!customer.policies) {
+      throw new AppError(409, 'POLICIES_NOT_ACCEPTED', 'Accept the new terms first');
+    }
+    if (Number(customer.balance) < 0) {
+      throw new AppError(409, 'WALLET_NEGATIVE', 'Your wallet is negative, top it up first', {
+        balance: customer.balance,
+      });
+    }
+    if (row.payment_method === 'wallet' && Number(customer.available) < Number(quote.customer_amount)) {
+      throw new AppError(409, 'WALLET_TOO_LOW', 'Your wallet balance is not enough, top it up or pay cash', {
+        available: customer.available, needed: quote.customer_amount,
+      });
+    }
+    await client.query("UPDATE shipments SET status = 'searching_driver' WHERE id = $1", [id]);
+  });
+  await reply(req, res, id);
+});
+
+router.post('/:id/cancel', async (req, res) => {
+  const id = cleanId(req.params.id);
+  const body = bodyOf(req);
+  const reason = body.reason === undefined ? null : cleanOptionalText(body.reason, 'reason', 500);
+  await withTransaction(actorOf(req, reason), async (client) => {
+    const row = await lockShipment(client, id, req.user.id);
+    if (row.status !== 'draft' && row.status !== 'searching_driver') {
+      throw new AppError(409, 'WRONG_STATUS', `The shipment is ${row.status}`, { status: row.status });
+    }
+    await client.query(
+      "UPDATE shipments SET status = 'cancelled', cancellation_reason = $2 WHERE id = $1",
+      [id, reason],
+    );
   });
   await reply(req, res, id);
 });

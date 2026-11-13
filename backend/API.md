@@ -330,7 +330,7 @@ Returns `{ "payoutAccount": { ... } }` or `{ "payoutAccount": null }`. Only the 
 
 Everything under `/shipments` needs a customer account. Others get `403` with `ROLE_REQUIRED`.
 
-The steps: make the shipment, add photos of the cargo, ask for prices, then accept one. The shipment is a `draft` and can change until a price is accepted.
+The steps: make the shipment, add photos of the cargo, ask for prices, accept one, then send the request. Until it is sent the shipment is a `draft` and can change.
 
 Every request below returns `{ "shipment": { ... } }`:
 
@@ -428,6 +428,22 @@ Errors: `QUOTE_EXPIRED`, `QUOTE_OUTDATED` (the shipment changed after this price
 No body. Cancels the accepted price, so the shipment can change again. Ask for new prices after that.
 
 Errors: `PRICE_NOT_ACCEPTED`
+
+### POST /shipments/:id/request
+
+No body. Sends the shipment to the drivers, the status becomes `searching_driver`.
+
+Errors: `PRICE_NOT_ACCEPTED`, `PRICE_TOO_OLD` (the pickup time passed, withdraw and ask again), `POLICIES_NOT_ACCEPTED`, `WALLET_NEGATIVE` (has `balance`), `WALLET_TOO_LOW` (has `available` and `needed`, top up or pay cash)
+
+### POST /shipments/:id/cancel
+
+```json
+{ "reason": "Changed my mind" }
+```
+
+`reason` is optional. Only a `draft` or `searching_driver` shipment, later cancelling comes with the trips.
+
+Errors: `WRONG_STATUS`
 
 ## Admin
 
