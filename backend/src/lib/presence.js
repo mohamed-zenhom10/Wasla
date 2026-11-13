@@ -1,6 +1,6 @@
 import { query } from '../db.js';
 import { AppError } from '../errors.js';
-import { cleanCoordinate } from './validate.js';
+import { cleanCoordinate, invalid } from './validate.js';
 
 const STATE_SQL = `SELECT dp.verification_status, dp.is_online, dp.active_vehicle_id, dp.location_updated_at,
     ST_X(dp.current_location::geometry) AS lng, ST_Y(dp.current_location::geometry) AS lat,
@@ -35,6 +35,17 @@ const BLOCKERS = {
 
 export function readPoint(body) {
   return { lat: cleanCoordinate(body.lat, 'lat', 90), lng: cleanCoordinate(body.lng, 'lng', 180) };
+}
+
+export function readAccuracy(body) {
+  const value = body.accuracyM;
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100000) {
+    throw invalid('accuracyM', 'accuracyM must be a number from 0 to 100000');
+  }
+  return Math.round(value * 100) / 100;
 }
 
 export async function loadState(client, userId, lock = false) {

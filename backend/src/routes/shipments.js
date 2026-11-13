@@ -11,6 +11,7 @@ import {
   shipmentFields, stateOf, buildColumns, insertShipment, updateShipment, priceShipment, loadShipment, lockShipment,
   requireDraft, toShipmentSummary, SUMMARY_SQL, STATUS_FILTERS,
 } from '../lib/shipments.js';
+import { loadTracking } from '../lib/trips.js';
 
 const router = Router();
 const PAGE_SIZE = 20;
@@ -78,6 +79,15 @@ router.get('/:id', async (req, res) => {
     throw new AppError(404, 'NOT_FOUND', 'Shipment not found');
   }
   await reply(req, res, id);
+});
+
+router.get('/:id/tracking', async (req, res) => {
+  const id = cleanId(req.params.id);
+  const { rows: [own] } = await query('SELECT 1 FROM shipments WHERE id = $1 AND customer_id = $2', [id, req.user.id]);
+  if (!own) {
+    throw new AppError(404, 'NOT_FOUND', 'Shipment not found');
+  }
+  res.json({ tracking: await loadTracking(id) });
 });
 
 router.patch('/:id', async (req, res) => {

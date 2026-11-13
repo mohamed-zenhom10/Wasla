@@ -347,10 +347,10 @@ No body.
 ### POST /driver/location
 
 ```json
-{ "lat": 30.0561, "lng": 31.3301 }
+{ "lat": 30.0561, "lng": 31.3301, "accuracyM": 12.5 }
 ```
 
-Send it every 30 seconds while the driver is online. A driver who sends nothing for `autoOfflineAfterSeconds` (15 minutes) is set offline by the server.
+Send it every 30 seconds while the driver is online, and every 10 seconds during a trip (from `start` until `deliver`). During a trip every location is saved for the customer's tracking. `accuracyM` is the GPS accuracy in meters, optional. A driver who sends nothing for `autoOfflineAfterSeconds` (15 minutes) is set offline by the server.
 
 Errors: `NOT_ONLINE` (the driver is offline now, show the home screen as offline), `INVALID_INPUT`
 
@@ -438,12 +438,12 @@ Every step returns `{ "trip": { ... } }`. A step in the wrong order returns `409
 
 | Screen | Request | Body |
 |---|---|---|
-| Navigate to pickup | `POST /driver/trips/:id/start` | `{ "lat": 30.05, "lng": 31.33 }` (needed) |
-| I've arrived (pickup) | `POST /driver/trips/:id/arrive-pickup` | `{ "lat", "lng" }` (optional) |
+| Navigate to pickup | `POST /driver/trips/:id/start` | `{ "lat": 30.05, "lng": 31.33 }` (needed), `accuracyM` (optional) |
+| I've arrived (pickup) | `POST /driver/trips/:id/arrive-pickup` | `{ "lat", "lng", "accuracyM" }` (optional) |
 | Cargo photos | `PUT /driver/trips/:id/photos/pickup` | the photo itself |
 | Cargo loaded | `POST /driver/trips/:id/loaded` | `{ "cashCollected": true }` when `cashToCollect` is taken at pickup |
 | Start trip | `POST /driver/trips/:id/depart` | `{ "vehicleFit": "suitable" }` |
-| I've arrived (drop-off) | `POST /driver/trips/:id/arrive-dropoff` | `{ "lat", "lng" }` (optional) |
+| I've arrived (drop-off) | `POST /driver/trips/:id/arrive-dropoff` | `{ "lat", "lng", "accuracyM" }` (optional) |
 | Delivery code | `POST /driver/trips/:id/verify-code` | `{ "code": "4821" }` |
 | Delivery photos | `PUT /driver/trips/:id/photos/delivery` | the photo itself |
 | Complete delivery | `POST /driver/trips/:id/deliver` | `{ "payment": "collected" }` when the recipient pays |
@@ -598,6 +598,28 @@ Every request below returns `{ "shipment": { ... } }`:
 Returns `201`. Errors: `INVALID_INPUT`, `SAME_PLACE`
 
 ### GET /shipments/:id
+
+### GET /shipments/:id/tracking
+
+For the trip screen. Call it every 10 seconds while the trip is running. It is small, so the app does not need to load the whole shipment each time.
+
+```json
+{
+  "tracking": {
+    "shipmentStatus": "in_progress", "tripId": "7", "tripStatus": "heading_to_dropoff",
+    "signal": "live", "nextStop": "dropoff",
+    "driverLocation": { "lat": 30.0213, "lng": 31.2219, "accuracyM": 12.5, "recordedAt": "..." },
+    "distanceToNextStopM": 4120
+  }
+}
+```
+
+- `driverLocation` is there only while the trip is running (`heading_to_pickup` to `arrived_at_dropoff`). Before the driver starts and after the delivery it is null.
+- `signal` is `live`, or `lost` when the driver sent nothing for `locationStaleSeconds` (2 minutes). Show the last location with a "no signal" note. It is null when the trip is not running.
+- `nextStop` is `pickup` or `dropoff`. `distanceToNextStopM` is a straight line, not the road.
+- `tripId` and `tripStatus` are null before a driver accepts.
+
+Errors: `NOT_FOUND`
 
 ### PATCH /shipments/:id
 

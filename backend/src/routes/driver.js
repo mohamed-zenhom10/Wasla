@@ -15,10 +15,10 @@ import {
 } from '../lib/driver.js';
 import { POINT_SQL } from '../lib/route.js';
 import {
-  readPoint, loadState, blockersOf, blockerError, loadStatus,
+  readPoint, readAccuracy, loadState, blockersOf, blockerError, loadStatus,
 } from '../lib/presence.js';
 import tripsRouter from './driverTrips.js';
-import { EXECUTING } from '../lib/trips.js';
+import { EXECUTING, trackPoint } from '../lib/trips.js';
 
 const router = Router();
 const LICENSES = ['private', 'professional_3', 'professional_2', 'professional_1'];
@@ -305,7 +305,9 @@ router.post('/offline', async (req, res) => {
 });
 
 router.post('/location', async (req, res) => {
-  const point = readPoint(bodyOf(req));
+  const body = bodyOf(req);
+  const point = readPoint(body);
+  const accuracy = readAccuracy(body);
   const { rowCount } = await query(
     `UPDATE driver_profiles SET current_location = ${POINT_SQL('$2', '$3')}, location_updated_at = now()
      WHERE user_id = $1 AND is_online`,
@@ -314,6 +316,7 @@ router.post('/location', async (req, res) => {
   if (rowCount === 0) {
     throw new AppError(409, 'NOT_ONLINE', 'You are offline, go online first');
   }
+  await trackPoint({ query }, req.user.id, point, accuracy);
   await replyStatus(req, res);
 });
 

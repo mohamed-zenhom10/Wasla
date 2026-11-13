@@ -1,6 +1,7 @@
 import { query } from '../db.js';
 import { AppError } from '../errors.js';
 import { imageUrl } from './storage.js';
+import { POINT_SQL } from './route.js';
 
 export const EXECUTING = ['heading_to_pickup', 'arrived_at_pickup', 'loaded', 'heading_to_dropoff', 'arrived_at_dropoff'];
 export const FINISHED = ['delivered', 'cancelled'];
@@ -129,6 +130,61 @@ export async function listTrips(driverId, finished, limit, offset) {
     [driverId, FINISHED, finished, limit, offset],
   );
   return rows.map(toTrip);
+}
+
+export async function trackPoint(client, driverId, point, accuracy = null) {
+  await client.query(
+    `INSERT INTO trip_location_points (trip_id, location, recorded_at, accuracy_m)
+     SELECT t.id, ${POINT_SQL('$2', '$3')}, now(), $4
+     FROM trips t WHERE t.driver_id = $1 AND t.status = ANY($5::text[])`,
+    [driverId, point.lng, point.lat, accuracy, EXECUTING],
+  );
+}
+
+const TO_PICKUP = ['heading_to_pickup', 'arrived_at_pickup'];
+
+export async function loadTracking(shipmentId) {
+  const { rows: [row] } = await query(
+    `SELECT s.status AS shipment_status, t.id AS trip_id, t.status AS trip_status,
+            p.recorded_at, p.accuracy_m, ST_X(p.location::geometry) AS lng, ST_Y(p.location::geometry) AS lat,
+            round(ST_Distance(p.location, CASE WHEN t.status = ANY($3::text[]) THEN s.pickup_location
+                                               ELSE s.dropoff_location END))::int AS distance_m,
+            p.recorded_at < now() - make_interval(secs => ps.location_stale_seconds) AS is_stale
+     FROM shipments s
+     CROSS JOIN platform_settings ps
+     LEFT JOIN trips t ON t.shipment_id = s.id AND t.status <> 'cancelled'
+     LEFT JOIN LATERAL (
+       SELECT l.location, l.recorded_at, l.accuracy_m FROM trip_location_points l
+       WHERE l.trip_id = t.id AND t.status = ANY($2::text[])
+       ORDER BY l.recorded_at DESC, l.id DESC
+       LIMIT 1
+     ) p ON true
+     WHERE s.id = $1`,
+    [shipmentId, EXECUTING, TO_PICKUP],
+  );
+  const moving = EXECUTING.includes(row.trip_status);
+  let signal = null;
+  if (moving) {
+    signal = row.recorded_at && !row.is_stale ? 'live' : 'lost';
+  }
+  let nextStop = null;
+  if (moving) {
+    nextStop = TO_PICKUP.includes(row.trip_status) ? 'pickup' : 'dropoff';
+  }
+  return {
+    shipmentStatus: row.shipment_status,
+    tripId: row.trip_id,
+    tripStatus: row.trip_status,
+    signal,
+    nextStop,
+    driverLocation: row.recorded_at ? {
+      lat: Number(row.lat),
+      lng: Number(row.lng),
+      accuracyM: row.accuracy_m === null ? null : Number(row.accuracy_m),
+      recordedAt: row.recorded_at,
+    } : null,
+    distanceToNextStopM: row.recorded_at ? row.distance_m : null,
+  };
 }
 
 export async function shipmentTrip(shipmentId) {

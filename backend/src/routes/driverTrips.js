@@ -10,13 +10,13 @@ import {
 } from '../lib/storage.js';
 import { POINT_SQL } from '../lib/route.js';
 import {
-  readPoint, loadState, blockersOf, blockerError,
+  readPoint, readAccuracy, loadState, blockersOf, blockerError,
 } from '../lib/presence.js';
 import {
   closeOldOffers, makeOffers, listOffers, createTrip,
 } from '../lib/dispatch.js';
 import {
-  EXECUTING, FINISHED, loadTrip, currentTrip, listTrips,
+  EXECUTING, FINISHED, loadTrip, currentTrip, listTrips, trackPoint,
 } from '../lib/trips.js';
 
 const router = Router();
@@ -162,11 +162,13 @@ async function saveLocation(client, driverId, body) {
     return;
   }
   const point = readPoint(body);
+  const accuracy = readAccuracy(body);
   await client.query(
     `UPDATE driver_profiles SET current_location = ${POINT_SQL('$2', '$3')}, location_updated_at = now()
      WHERE user_id = $1 AND is_online`,
     [driverId, point.lng, point.lat],
   );
+  await trackPoint(client, driverId, point, accuracy);
 }
 
 async function replyTrip(req, res, id) {
@@ -175,7 +177,9 @@ async function replyTrip(req, res, id) {
 
 router.post('/trips/:id/start', async (req, res) => {
   const id = cleanId(req.params.id);
-  const point = readPoint(bodyOf(req));
+  const body = bodyOf(req);
+  const point = readPoint(body);
+  const accuracy = readAccuracy(body);
   await withTransaction(actorOf(req), async (client) => {
     const state = await loadState(client, req.user.id, true);
     const trip = await lockTrip(client, id, req.user.id, 'assigned');
@@ -200,6 +204,7 @@ router.post('/trips/:id/start', async (req, res) => {
       [req.user.id, point.lng, point.lat],
     );
     await moveTrip(client, id, 'heading_to_pickup');
+    await trackPoint(client, req.user.id, point, accuracy);
   });
   await replyTrip(req, res, id);
 });
