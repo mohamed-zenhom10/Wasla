@@ -19,6 +19,8 @@ const CONSTRAINT_ERRORS = {
   ex_trips_driver_schedule: [409, 'SCHEDULE_CONFLICT', 'You have another trip at this time'],
   ex_trips_vehicle_schedule: [409, 'SCHEDULE_CONFLICT', 'You have another trip at this time'],
   uq_shipment_live_trip: [409, 'OFFER_GONE', 'This request is no longer available'],
+  ex_trips_driver_executing: [409, 'ANOTHER_TRIP_RUNNING', 'Finish your current trip first'],
+  ex_trips_vehicle_executing: [409, 'ANOTHER_TRIP_RUNNING', 'Finish your current trip first'],
 };
 
 function duplicateField(detail) {

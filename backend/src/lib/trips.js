@@ -1,5 +1,6 @@
 import { query } from '../db.js';
 import { AppError } from '../errors.js';
+import { imageUrl } from './storage.js';
 
 export const EXECUTING = ['heading_to_pickup', 'arrived_at_pickup', 'loaded', 'heading_to_dropoff', 'arrived_at_dropoff'];
 export const FINISHED = ['delivered', 'cancelled'];
@@ -19,12 +20,15 @@ export const JOB_COLUMNS = `s.id AS shipment_id, s.cargo_category_id, s.size_opt
 const TRIP_SQL = `SELECT t.id, t.status, t.planned_start_at, t.planned_end_at, t.started_at, t.loaded_at,
     t.delivered_at, t.cancelled_at, t.cancellation_party, t.cancellation_reason, t.vehicle_fit,
     t.delivery_code_verified_at, t.created_at,
+    GREATEST(0, ps.max_delivery_code_attempts - t.delivery_code_attempts) AS code_attempts_left,
+    (SELECT p.status FROM payments p WHERE p.collected_on_trip_id = t.id) AS cash_status,
     ${JOB_COLUMNS},
     s.recipient_name, s.recipient_phone, cu.full_name AS customer_name, cu.phone AS customer_phone
   FROM trips t
   JOIN shipments s ON s.id = t.shipment_id
   JOIN price_quotes q ON q.id = t.price_quote_id
-  JOIN users cu ON cu.id = s.customer_id`;
+  JOIN users cu ON cu.id = s.customer_id
+  CROSS JOIN platform_settings ps`;
 
 function toPlace(row, prefix) {
   return {
@@ -70,7 +74,9 @@ export function toTrip(row) {
     customer: { name: row.customer_name, phone: live ? row.customer_phone : null },
     recipient: row.recipient_name ? { name: row.recipient_name, phone: live ? row.recipient_phone : null } : null,
     vehicleFit: row.vehicle_fit,
+    cashStatus: row.cash_status,
     deliveryCodeVerified: row.delivery_code_verified_at !== null,
+    deliveryCodeAttemptsLeft: row.code_attempts_left,
     plannedStartAt: row.planned_start_at,
     plannedEndAt: row.planned_end_at,
     startedAt: row.started_at,
@@ -83,15 +89,27 @@ export function toTrip(row) {
   };
 }
 
-export async function loadTrip(id, driverId) {
+async function withPhotos(trip, baseUrl) {
+  const { rows } = await query(
+    'SELECT id, stage, storage_key, uploaded_at FROM trip_photos WHERE trip_id = $1 ORDER BY id',
+    [trip.id],
+  );
+  const photos = { pickup: [], delivery: [] };
+  for (const row of rows) {
+    photos[row.stage].push({ id: row.id, url: imageUrl(row.storage_key, baseUrl), uploadedAt: row.uploaded_at });
+  }
+  return { ...trip, photos };
+}
+
+export async function loadTrip(id, driverId, baseUrl) {
   const { rows: [row] } = await query(`${TRIP_SQL} WHERE t.id = $1 AND t.driver_id = $2`, [id, driverId]);
   if (!row) {
     throw new AppError(404, 'NOT_FOUND', 'Trip not found');
   }
-  return toTrip(row);
+  return withPhotos(toTrip(row), baseUrl);
 }
 
-export async function currentTrip(driverId) {
+export async function currentTrip(driverId, baseUrl) {
   const { rows: [row] } = await query(
     `${TRIP_SQL}
      WHERE t.driver_id = $1 AND t.status <> ALL($2::text[])
@@ -99,7 +117,7 @@ export async function currentTrip(driverId) {
      LIMIT 1`,
     [driverId, FINISHED],
   );
-  return row ? toTrip(row) : null;
+  return row ? withPhotos(toTrip(row), baseUrl) : null;
 }
 
 export async function listTrips(driverId, finished, limit, offset) {

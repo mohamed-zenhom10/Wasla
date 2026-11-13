@@ -18,6 +18,7 @@ import {
   readPoint, loadState, blockersOf, blockerError, loadStatus,
 } from '../lib/presence.js';
 import tripsRouter from './driverTrips.js';
+import { EXECUTING } from '../lib/trips.js';
 
 const router = Router();
 const LICENSES = ['private', 'professional_3', 'professional_2', 'professional_1'];
@@ -290,10 +291,16 @@ router.post('/online', async (req, res) => {
 });
 
 router.post('/offline', async (req, res) => {
-  await withTransaction(actorOf(req), (client) => client.query(
-    'UPDATE driver_profiles SET is_online = false WHERE user_id = $1 AND is_online',
-    [req.user.id],
-  ));
+  await withTransaction(actorOf(req), async (client) => {
+    const { rows: [running] } = await client.query(
+      'SELECT id FROM trips WHERE driver_id = $1 AND status = ANY($2::text[]) LIMIT 1',
+      [req.user.id, EXECUTING],
+    );
+    if (running) {
+      throw new AppError(409, 'TRIP_RUNNING', 'Finish your trip before going offline', { tripId: running.id });
+    }
+    await client.query('UPDATE driver_profiles SET is_online = false WHERE user_id = $1 AND is_online', [req.user.id]);
+  });
   await replyStatus(req, res);
 });
 

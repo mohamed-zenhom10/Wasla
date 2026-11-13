@@ -404,9 +404,10 @@ A trip is a shipment the driver accepted. A trip has everything a request has, p
     "id": "7", "status": "assigned",
     "customer": { "name": "Mariam Adel", "phone": "+201012345678" },
     "recipient": { "name": "Mona", "phone": "+201098765432" },
-    "vehicleFit": null, "deliveryCodeVerified": false,
+    "vehicleFit": null, "cashStatus": null, "deliveryCodeVerified": false, "deliveryCodeAttemptsLeft": 5,
     "plannedStartAt": "...", "plannedEndAt": "...", "startedAt": null, "loadedAt": null, "deliveredAt": null,
-    "cancelledAt": null, "cancellationParty": null, "cancellationReason": null, "createdAt": "..."
+    "cancelledAt": null, "cancellationParty": null, "cancellationReason": null, "createdAt": "...",
+    "photos": { "pickup": [ { "id": "3", "url": "https://...", "uploadedAt": "..." } ], "delivery": [] }
   }
 }
 ```
@@ -414,6 +415,8 @@ A trip is a shipment the driver accepted. A trip has everything a request has, p
 - `status` is `assigned`, `heading_to_pickup`, `arrived_at_pickup`, `loaded`, `heading_to_dropoff`, `arrived_at_dropoff`, `delivered` or `cancelled`.
 - The phones are there only while the trip is running. After `delivered` or `cancelled` they are null.
 - `recipient` is null when the customer did not add one.
+- `cashStatus` is null until the driver takes the cash, then `collected`, or `charged_to_sender` when the recipient refused to pay.
+- `photos` comes with one trip (`GET /driver/trips/:id`, `current` and every step below), not in the list.
 
 ### GET /driver/trips/current
 
@@ -424,6 +427,66 @@ The trip the driver is working on now, or the next one he accepted. `{ "trip": n
 `status` is `active` (default) or `finished`. 20 per page. Returns `trips`, `page` and `hasMore`.
 
 ### GET /driver/trips/:id
+
+### The steps of a trip
+
+```
+assigned -> heading_to_pickup -> arrived_at_pickup -> loaded -> heading_to_dropoff -> arrived_at_dropoff -> delivered
+```
+
+Every step returns `{ "trip": { ... } }`. A step in the wrong order returns `409` with `WRONG_STEP` and the trip `status` now.
+
+| Screen | Request | Body |
+|---|---|---|
+| Navigate to pickup | `POST /driver/trips/:id/start` | `{ "lat": 30.05, "lng": 31.33 }` (needed) |
+| I've arrived (pickup) | `POST /driver/trips/:id/arrive-pickup` | `{ "lat", "lng" }` (optional) |
+| Cargo photos | `PUT /driver/trips/:id/photos/pickup` | the photo itself |
+| Cargo loaded | `POST /driver/trips/:id/loaded` | `{ "cashCollected": true }` when `cashToCollect` is taken at pickup |
+| Start trip | `POST /driver/trips/:id/depart` | `{ "vehicleFit": "suitable" }` |
+| I've arrived (drop-off) | `POST /driver/trips/:id/arrive-dropoff` | `{ "lat", "lng" }` (optional) |
+| Delivery code | `POST /driver/trips/:id/verify-code` | `{ "code": "4821" }` |
+| Delivery photos | `PUT /driver/trips/:id/photos/delivery` | the photo itself |
+| Complete delivery | `POST /driver/trips/:id/deliver` | `{ "payment": "collected" }` when the recipient pays |
+
+#### POST /driver/trips/:id/start
+
+The driver goes online with this location. The server checks the driver again, because a scheduled trip may be accepted days before.
+
+Errors: `ANOTHER_TRIP_RUNNING` (with `tripId`), `VEHICLE_CHANGED`, the blockers of `POST /driver/online` like `LICENSE_EXPIRED` or `DEBT_OVER_LIMIT`, `INVALID_INPUT`
+
+While a trip is running (`heading_to_pickup` to `arrived_at_dropoff`) the driver cannot go offline: `POST /driver/offline` returns `TRIP_RUNNING` with `tripId`.
+
+#### PUT /driver/trips/:id/photos/pickup and /photos/delivery
+
+Same as the other photos: the body is the photo (`image/jpeg`, `png` or `webp`, up to 5 MB). Pickup photos only at `arrived_at_pickup`, delivery photos only at `arrived_at_dropoff`. At most 6 of each. Returns `201`.
+
+Errors: `WRONG_STEP`, `TOO_MANY_PHOTOS`, `UNSUPPORTED_IMAGE`, `INVALID_IMAGE`, `STORAGE_FAILED`
+
+#### POST /driver/trips/:id/loaded
+
+Needs at least one pickup photo. When the shipment is cash and `farePaidBy` is `sender`, the driver takes `cashToCollect` from the customer now and sends `"cashCollected": true`.
+
+Errors: `PHOTO_REQUIRED`, `CASH_NOT_COLLECTED` (with `amount`), `WRONG_STEP`
+
+After this the driver cannot cancel the trip, only support can.
+
+#### POST /driver/trips/:id/depart
+
+`vehicleFit` is how the vehicle fitted the cargo: `suitable`, `too_small` or `too_large`. Needed.
+
+#### POST /driver/trips/:id/verify-code
+
+The recipient tells the driver the 4 digit code (the customer has it in `GET /shipments/:id`).
+
+Errors: `WRONG_CODE` (with `attemptsLeft`), `CODE_LOCKED` (5 wrong codes, support gives a new code), `INVALID_INPUT`
+
+#### POST /driver/trips/:id/deliver
+
+Needs the right code and at least one delivery photo. When the shipment is cash and `farePaidBy` is `recipient`, send `"payment": "collected"`, or `"payment": "refused"` when the recipient did not pay (the amount goes on the customer's wallet).
+
+Errors: `CODE_NOT_VERIFIED`, `PHOTO_REQUIRED`, `CASH_NOT_COLLECTED` (with `amount`), `WRONG_STEP`
+
+When the trip is delivered with cash, the platform commission is taken from the driver wallet (`balance` in `GET /driver/status`).
 
 ### POST /driver/trips/:id/cancel
 
