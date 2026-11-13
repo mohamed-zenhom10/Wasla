@@ -3,6 +3,7 @@ import { query } from '../db.js';
 import { AppError } from '../errors.js';
 import { imageUrl } from './storage.js';
 import { estimateRoute, POINT_SQL } from './route.js';
+import { shipmentTrip } from './trips.js';
 import {
   invalid, cleanRef, cleanText, cleanOptionalText, cleanInteger, cleanBoolean, cleanChoice, cleanMeasure,
   cleanCoordinate, cleanPhone,
@@ -352,7 +353,8 @@ export const STATUS_FILTERS = {
 
 export async function loadShipment(id, baseUrl, recommendedId) {
   const { rows: [row] } = await query(`SELECT ${SHIPMENT_COLUMNS} FROM shipments s WHERE s.id = $1`, [id]);
-  const [photos, quotes, history] = await Promise.all([
+  const [trip, photos, quotes, history] = await Promise.all([
+    shipmentTrip(id),
     query('SELECT id, storage_key, uploaded_at FROM shipment_item_images WHERE shipment_id = $1 ORDER BY id', [id]),
     query(
       `SELECT * FROM price_quotes WHERE shipment_id = $1
@@ -409,6 +411,7 @@ export async function loadShipment(id, baseUrl, recommendedId) {
       id: p.id, url: imageUrl(p.storage_key, baseUrl), uploadedAt: p.uploaded_at,
     })),
     acceptedQuote: accepted ? toQuote(accepted, null) : null,
+    trip,
     quotes: quotes.rows.filter((q) => q.status === 'offered').map((q) => toQuote(q, recommended)),
     timeline: history.rows.map((h) => ({
       from: h.from_status, to: h.to_status, by: h.change_source, reason: h.reason, at: h.created_at,

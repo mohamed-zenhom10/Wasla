@@ -16,6 +16,9 @@ const CONSTRAINT_ERRORS = {
     { field: 'minTopupAmount' }],
   ck_settings_offline_after_stale: [400, 'INVALID_INPUT',
     'autoOfflineAfterSeconds must be more than locationStaleSeconds', { field: 'autoOfflineAfterSeconds' }],
+  ex_trips_driver_schedule: [409, 'SCHEDULE_CONFLICT', 'You have another trip at this time'],
+  ex_trips_vehicle_schedule: [409, 'SCHEDULE_CONFLICT', 'You have another trip at this time'],
+  uq_shipment_live_trip: [409, 'OFFER_GONE', 'This request is no longer available'],
 };
 
 function duplicateField(detail) {

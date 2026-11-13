@@ -17,12 +17,14 @@ import { POINT_SQL } from '../lib/route.js';
 import {
   readPoint, loadState, blockersOf, blockerError, loadStatus,
 } from '../lib/presence.js';
+import tripsRouter from './driverTrips.js';
 
 const router = Router();
 const LICENSES = ['private', 'professional_3', 'professional_2', 'professional_1'];
 const imageBody = express.raw({ type: IMAGE_TYPES, limit: `${MAX_IMAGE_MB}mb` });
 
 router.use(requireAuth, requireRole('driver'));
+router.use(tripsRouter);
 
 function actorOf(req) {
   return { id: req.user.id, role: 'driver' };

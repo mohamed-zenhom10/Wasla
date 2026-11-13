@@ -1,4 +1,5 @@
 import { withTransaction } from './db.js';
+import { closeOldOffers, cancelUnmatched } from './lib/dispatch.js';
 
 const EVERY_MS = 30000;
 
@@ -14,7 +15,11 @@ async function closeSilentDrivers(client) {
   );
 }
 
-const JOBS = [closeSilentDrivers];
+async function closeOffers(client) {
+  await closeOldOffers(client);
+}
+
+const JOBS = [closeSilentDrivers, cancelUnmatched, closeOffers];
 
 async function runJobs() {
   for (const job of JOBS) {

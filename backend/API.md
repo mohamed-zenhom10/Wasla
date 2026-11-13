@@ -354,6 +354,87 @@ Send it every 30 seconds while the driver is online. A driver who sends nothing 
 
 Errors: `NOT_ONLINE` (the driver is offline now, show the home screen as offline), `INVALID_INPUT`
 
+## Driver requests
+
+A request is a shipment offered to the driver. The app asks for the list every few seconds while the driver is online, there is no push yet.
+
+### GET /driver/offers
+
+Call it every 5 seconds on the requests screen. Returns `{ "offers": [ ... ] }`, nearest pickup first:
+
+```json
+{
+  "id": "41", "sentAt": "...", "expiresAt": "...", "secondsLeft": 24, "distanceToPickupM": 3120,
+  "shipmentId": "12", "cargoCategoryId": "1", "sizeOptionId": "3", "cargoDescription": "A sofa and 2 chairs",
+  "itemCount": 3, "isFragile": false, "weightKg": 120, "helpersCount": 1,
+  "pickup": { "address": "...", "lat": 30.0444, "lng": 31.2357, "notes": "3rd floor" },
+  "dropoff": { "address": "...", "lat": 30.0131, "lng": 31.2089, "notes": null },
+  "pickupType": "now", "pickupWindowStart": "...", "pickupWindowEnd": "...",
+  "routeDistanceM": 12012, "routeDurationS": 1730,
+  "paymentMethod": "cash", "farePaidBy": "sender",
+  "fareAmount": "630.18", "commissionAmount": "94.53", "driverEarning": "535.65", "cashToCollect": "630.18"
+}
+```
+
+- A driver gets a request when he is online, within `dispatchRadiusM` of the pickup, his vehicle is the type the customer chose, it can carry the weight, and he can bring the helpers.
+- `secondsLeft` is for the countdown. When it ends the request is closed, and while the shipment still needs a driver it comes back in the list with a new `id`. A declined request does not come back.
+- `driverEarning` is what the driver keeps. `cashToCollect` is the cash he takes from the customer, `0.00` when the customer pays by wallet.
+- The list is empty when the driver is offline or cannot work now (see `blockers` in `GET /driver/status`).
+- The customer's name and phone come after accepting, in the trip.
+
+### POST /driver/offers/:id/accept
+
+No body. Returns `201` with `{ "trip": { ... } }`, see Driver trips.
+
+Errors: `OFFER_EXPIRED` (the time is over), `OFFER_GONE` (another driver took it, or the customer cancelled), `SCHEDULE_CONFLICT` (the driver has another trip at that time), `NOT_ONLINE`, and the blockers of `POST /driver/online` like `POLICIES_NOT_ACCEPTED`
+
+### POST /driver/offers/:id/decline
+
+No body. Returns the offers that are left, `{ "offers": [ ... ] }`.
+
+Errors: `OFFER_EXPIRED`, `OFFER_GONE`
+
+## Driver trips
+
+A trip is a shipment the driver accepted. A trip has everything a request has, plus:
+
+```json
+{
+  "trip": {
+    "id": "7", "status": "assigned",
+    "customer": { "name": "Mariam Adel", "phone": "+201012345678" },
+    "recipient": { "name": "Mona", "phone": "+201098765432" },
+    "vehicleFit": null, "deliveryCodeVerified": false,
+    "plannedStartAt": "...", "plannedEndAt": "...", "startedAt": null, "loadedAt": null, "deliveredAt": null,
+    "cancelledAt": null, "cancellationParty": null, "cancellationReason": null, "createdAt": "..."
+  }
+}
+```
+
+- `status` is `assigned`, `heading_to_pickup`, `arrived_at_pickup`, `loaded`, `heading_to_dropoff`, `arrived_at_dropoff`, `delivered` or `cancelled`.
+- The phones are there only while the trip is running. After `delivered` or `cancelled` they are null.
+- `recipient` is null when the customer did not add one.
+
+### GET /driver/trips/current
+
+The trip the driver is working on now, or the next one he accepted. `{ "trip": null }` when there is none. Call it when the app opens.
+
+### GET /driver/trips?status=active&page=1
+
+`status` is `active` (default) or `finished`. 20 per page. Returns `trips`, `page` and `hasMore`.
+
+### GET /driver/trips/:id
+
+### POST /driver/trips/:id/cancel
+
+```json
+{ "reason": "Flat tyre" }
+```
+
+The driver can cancel until the cargo is loaded. The shipment goes back to searching for another driver, and the customer does not lose the request.
+
+Errors: `CARGO_LOADED`, `TRIP_FINISHED`, `INVALID_INPUT`
+
 ## Payout account
 
 For any logged in user. Drivers get their earnings here every week, customers will use it to take money out of their wallet.
@@ -401,6 +482,7 @@ Every request below returns `{ "shipment": { ... } }`:
         "expiresAt": "...", "acceptedAt": null }
     ],
     "acceptedQuote": null,
+    "trip": null,
     "timeline": [ { "from": null, "to": "draft", "by": "customer", "reason": null, "at": "..." } ]
   }
 }
@@ -410,6 +492,20 @@ Every request below returns `{ "shipment": { ... } }`:
 - `deliveryCode` is shown to the customer only. The recipient tells it to the driver at the drop-off.
 - `quotes` has only the prices that can still be accepted. `customerAmount` is what the customer pays.
 - `url` opens the photo for 1 hour.
+- `trip` is null until a driver accepts. After that:
+
+```json
+"trip": {
+  "id": "7", "status": "assigned",
+  "driver": { "id": "15", "name": "Ahmed Ali", "phone": "+201055512345" },
+  "vehicle": { "vehicleTypeId": "2", "plateNumber": "ABC 123", "make": "Suzuki", "model": "Carry", "color": "White" },
+  "plannedStartAt": "...", "startedAt": null, "loadedAt": null, "deliveredAt": null
+}
+```
+
+- The driver's phone is null after the delivery. If the driver cancels, `trip` is null again and the shipment is back to `searching_driver`.
+- A shipment that finds no driver in `driverSearchTimeoutMinutes` (30 minutes) is cancelled by the server, with `cancellationParty` `platform` and `cancellationReason` `no_driver_found`.
+- A scheduled shipment is offered to drivers `scheduledSearchLeadMinutes` (60 minutes) before the pickup time, not before.
 
 ### GET /shipments?status=active&page=1
 
