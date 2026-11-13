@@ -309,6 +309,51 @@ Same as the driver photos. `type` is `vehicle_license_front`, `vehicle_license_b
 
 Errors: `APPLICATION_INCOMPLETE` (has `missing`, same list as above), `INVALID_INPUT` (`confirm`), `APPLICATION_LOCKED`
 
+## Driver status
+
+For an approved driver: going online and sending the location. Everything here returns `{ "status": { ... } }`:
+
+```json
+{
+  "status": {
+    "online": true, "onlineSince": "...", "canGoOnline": true, "blockers": [],
+    "vehicle": { "id": "4", "vehicleTypeId": "2", "plateNumber": "ABC 123", "make": "Suzuki", "model": "Carry", "color": "White" },
+    "location": { "lat": 30.0561, "lng": 31.3301, "updatedAt": "..." },
+    "balance": "0.00", "debtLimit": "1000.00"
+  }
+}
+```
+
+- `blockers` is why the driver cannot go online: `not_approved`, `no_active_vehicle`, `vehicle_not_active`, `policies_not_accepted`, `license_expired`, `license_too_low`, `vehicle_license_expired`, `debt_over_limit`. Empty means `canGoOnline` is true.
+- `vehicle` is the vehicle the driver works with now. `location` is the last one sent, or null.
+- `balance` is the driver wallet. It is negative when the driver owes the platform, and `debt_over_limit` means it passed `debtLimit`.
+
+### GET /driver/status
+
+Call it when the home screen opens.
+
+### POST /driver/online
+
+```json
+{ "lat": 30.0561, "lng": 31.3301 }
+```
+
+The location is needed. Errors (`409`): the first blocker in capital letters, for example `NOT_APPROVED` or `POLICIES_NOT_ACCEPTED`. `DEBT_OVER_LIMIT` has `balance` and `debtLimit`. Also `INVALID_INPUT`.
+
+### POST /driver/offline
+
+No body.
+
+### POST /driver/location
+
+```json
+{ "lat": 30.0561, "lng": 31.3301 }
+```
+
+Send it every 30 seconds while the driver is online. A driver who sends nothing for `autoOfflineAfterSeconds` (15 minutes) is set offline by the server.
+
+Errors: `NOT_ONLINE` (the driver is offline now, show the home screen as offline), `INVALID_INPUT`
+
 ## Payout account
 
 For any logged in user. Drivers get their earnings here every week, customers will use it to take money out of their wallet.

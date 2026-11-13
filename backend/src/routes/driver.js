@@ -1,5 +1,5 @@
 import express, { Router } from 'express';
-import { withTransaction } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import { AppError } from '../errors.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { bodyOf, readFields, insertRow, updateRow } from '../lib/fields.js';
@@ -13,6 +13,10 @@ import {
   DRIVER_DOCUMENTS, VEHICLE_DOCUMENTS, cleanDate, cleanNationalId, nationalIdHash, ageOn,
   applicationClosed, missingForSubmit, loadApplication,
 } from '../lib/driver.js';
+import { POINT_SQL } from '../lib/route.js';
+import {
+  readPoint, loadState, blockersOf, blockerError, loadStatus,
+} from '../lib/presence.js';
 
 const router = Router();
 const LICENSES = ['private', 'professional_3', 'professional_2', 'professional_1'];
@@ -257,6 +261,51 @@ router.post('/application/submit', async (req, res) => {
     );
   });
   await reply(req, res);
+});
+
+async function replyStatus(req, res) {
+  res.json({ status: await loadStatus(req.user.id) });
+}
+
+router.get('/status', replyStatus);
+
+router.post('/online', async (req, res) => {
+  const point = readPoint(bodyOf(req));
+  await withTransaction(actorOf(req), async (client) => {
+    const state = await loadState(client, req.user.id, true);
+    const [blocker] = blockersOf(state);
+    if (blocker) {
+      throw blockerError(blocker, state);
+    }
+    await client.query(
+      `UPDATE driver_profiles
+       SET current_location = ${POINT_SQL('$2', '$3')}, location_updated_at = now(), is_online = true
+       WHERE user_id = $1`,
+      [req.user.id, point.lng, point.lat],
+    );
+  });
+  await replyStatus(req, res);
+});
+
+router.post('/offline', async (req, res) => {
+  await withTransaction(actorOf(req), (client) => client.query(
+    'UPDATE driver_profiles SET is_online = false WHERE user_id = $1 AND is_online',
+    [req.user.id],
+  ));
+  await replyStatus(req, res);
+});
+
+router.post('/location', async (req, res) => {
+  const point = readPoint(bodyOf(req));
+  const { rowCount } = await query(
+    `UPDATE driver_profiles SET current_location = ${POINT_SQL('$2', '$3')}, location_updated_at = now()
+     WHERE user_id = $1 AND is_online`,
+    [req.user.id, point.lng, point.lat],
+  );
+  if (rowCount === 0) {
+    throw new AppError(409, 'NOT_ONLINE', 'You are offline, go online first');
+  }
+  await replyStatus(req, res);
 });
 
 export default router;
