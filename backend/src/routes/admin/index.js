@@ -6,6 +6,7 @@ import zonesRouter from './zones.js';
 import settingsRouter from './settings.js';
 import policiesRouter from './policies.js';
 import driversRouter from './drivers.js';
+import shipmentsRouter from './shipments.js';
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use(driversRouter);
 router.use('/zones', zonesRouter);
 router.use('/settings', settingsRouter);
 router.use('/policies', policiesRouter);
+router.use('/shipments', shipmentsRouter);
 
 export default router;

@@ -567,6 +567,11 @@ Errors: `APPROVAL_INCOMPLETE` (has `missing`), `WRONG_STATUS` (only a `pending` 
 - `GET /admin/payout-accounts?status=pending`: current accounts with the full account number, of drivers and customers.
 - `POST /admin/payout-accounts/:id/review`: `{ "decision": "approve" }` or `{ "decision": "reject", "rejectionCode": "name_mismatch", "rejectionReason": "..." }`. Codes: `name_mismatch`, `invalid_account`, `unsupported_bank`, `other`. The user gets an email when it is rejected.
 
+### Shipments
+
+- `GET /admin/shipments?status=active&search=mona&page=1`: 20 per page, newest first. Same `status` as the customer list. `search` is the shipment id or the customer name, email or phone. Returns `shipments` (each with `customerId`), `page`, `pageSize` and `total`.
+- `GET /admin/shipments/:id`: returns `customer` (id, fullName, email, phone) and `shipment`, the same shape the customer sees.
+
 ### Terms and privacy
 
 - `GET /admin/policies`: all versions, newest first
