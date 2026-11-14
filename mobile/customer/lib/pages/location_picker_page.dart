@@ -16,8 +16,8 @@ class PickedLocation {
   final LatLng point;
 }
 
-class Suggestion {
-  const Suggestion({
+class _Suggestion {
+  const _Suggestion({
     required this.title,
     required this.subtitle,
     required this.label,
@@ -43,6 +43,30 @@ class LocationException implements Exception {
 }
 
 class LocationService {
+  static const _headers = {
+    'User-Agent': 'WaslaCustomerApp/1.0 (mohamedzenhom7005@gmail.com)',
+    'Accept': 'application/json',
+  };
+
+  /// Last failure reason, shown in the UI to help debugging.
+  static String? lastError;
+
+  static Future<http.Response?> _get(Uri uri) async {
+    try {
+      final response = await http
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) {
+        lastError = 'Server replied ${response.statusCode}';
+        return null;
+      }
+      return response;
+    } catch (error) {
+      lastError = 'Network error: $error';
+      return null;
+    }
+  }
+
   // ---------- Device location ----------
   static Future<LatLng> currentLatLng() async {
     final enabled = await Geolocator.isLocationServiceEnabled();
@@ -90,83 +114,165 @@ class LocationService {
     return result.join(', ');
   }
 
-  // ---------- Search (Photon, OpenStreetMap data) ----------
-  static Future<List<Suggestion>> search(String query, LatLng bias) async {
+  // ---------- Search: Photon first, Nominatim as a fallback ----------
+  static Future<List<_Suggestion>> search(String query, LatLng bias) async {
+    lastError = null;
+    final photon = await _photonSearch(query, bias);
+    if (photon.isNotEmpty) {
+      lastError = null;
+      return photon;
+    }
+    final nominatim = await _nominatimSearch(query);
+    if (nominatim.isNotEmpty) lastError = null;
+    return nominatim;
+  }
+
+  static Future<List<_Suggestion>> _photonSearch(
+    String query,
+    LatLng bias,
+  ) async {
     final uri = Uri.https('photon.komoot.io', '/api/', {
       'q': query,
       'limit': '8',
       'lang': 'en',
       'lat': '${bias.latitude}',
       'lon': '${bias.longitude}',
-      // Egypt only: minLon,minLat,maxLon,maxLat
       'bbox': '24.5,21.5,37.0,32.0',
     });
-    final response = await http.get(uri).timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) return const [];
+    final response = await _get(uri);
+    if (response == null) return const [];
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final features = (data['features'] as List<dynamic>?) ?? const [];
-    final results = <Suggestion>[];
-    final seenLabels = <String>{};
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final features = (data['features'] as List<dynamic>?) ?? const [];
+      final results = <_Suggestion>[];
+      final seenLabels = <String>{};
 
-    for (final item in features) {
-      final feature = item as Map<String, dynamic>;
-      final props = (feature['properties'] as Map<String, dynamic>?) ?? {};
-      final coords = (feature['geometry']?['coordinates'] as List<dynamic>?);
-      if (coords == null || coords.length < 2) continue;
+      for (final item in features) {
+        final feature = item as Map<String, dynamic>;
+        final props = (feature['properties'] as Map<String, dynamic>?) ?? {};
+        final coords = feature['geometry']?['coordinates'] as List<dynamic>?;
+        if (coords == null || coords.length < 2) continue;
 
-      final name = _clean(props['name']);
-      final street = _clean(props['street']);
-      final house = _clean(props['housenumber']);
-      final district = _clean(props['district']) ?? _clean(props['locality']);
-      final city = _clean(props['city']);
-      final state = _clean(props['state']);
+        final name = _clean(props['name']);
+        final street = _clean(props['street']);
+        final house = _clean(props['housenumber']);
+        final district = _clean(props['district']) ?? _clean(props['locality']);
+        final city = _clean(props['city']);
+        final state = _clean(props['state']);
 
-      final streetLine = street == null
-          ? null
-          : (house == null ? street : '$street $house');
-      final title = name ?? streetLine ?? district ?? city;
-      if (title == null) continue;
+        final streetLine = street == null
+            ? null
+            : (house == null ? street : '$street $house');
+        final title = name ?? streetLine ?? district ?? city;
+        if (title == null) continue;
 
-      final subtitle = _join(
-        [
-          if (name != null) streetLine,
-          district,
-          city,
-          state,
-        ].where((part) => part != null && part != title),
-      );
+        final subtitle = _join(
+          [
+            if (name != null) streetLine,
+            district,
+            city,
+            state,
+          ].where((part) => part != null && part != title),
+        );
 
-      final area = district ?? city;
-      final label = _join([title, area != title ? area : null], max: 2);
-      if (!seenLabels.add(label.toLowerCase())) continue;
+        final area = district ?? city;
+        final label = _join([title, area != title ? area : null], max: 2);
+        if (!seenLabels.add(label.toLowerCase())) continue;
 
-      results.add(
-        Suggestion(
-          title: title,
-          subtitle: subtitle,
-          label: label,
-          point: LatLng(
-            (coords[1] as num).toDouble(),
-            (coords[0] as num).toDouble(),
+        results.add(
+          _Suggestion(
+            title: title,
+            subtitle: subtitle,
+            label: label,
+            point: LatLng(
+              (coords[1] as num).toDouble(),
+              (coords[0] as num).toDouble(),
+            ),
           ),
-        ),
-      );
+        );
+      }
+      return results;
+    } catch (error) {
+      lastError = 'Could not read search results: $error';
+      return const [];
     }
-    return results;
+  }
+
+  static Future<List<_Suggestion>> _nominatimSearch(String query) async {
+    final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+      'format': 'jsonv2',
+      'q': query,
+      'limit': '8',
+      'countrycodes': 'eg',
+      'addressdetails': '1',
+      'accept-language': 'en',
+    });
+    final response = await _get(uri);
+    if (response == null) return const [];
+
+    try {
+      final list = jsonDecode(response.body) as List<dynamic>;
+      final results = <_Suggestion>[];
+      final seenLabels = <String>{};
+
+      for (final item in list) {
+        final map = item as Map<String, dynamic>;
+        final address = (map['address'] as Map<String, dynamic>?) ?? {};
+        final displayParts = (_clean(map['display_name']) ?? '')
+            .split(',')
+            .map((part) => _clean(part))
+            .toList();
+
+        final title =
+            _clean(map['name']) ??
+            _clean(address['road']) ??
+            (displayParts.isEmpty ? null : displayParts.first);
+        if (title == null) continue;
+
+        final area =
+            _clean(address['suburb']) ??
+            _clean(address['neighbourhood']) ??
+            _clean(address['city_district']) ??
+            _clean(address['city']) ??
+            _clean(address['town']);
+        final label = _join([title, area != title ? area : null], max: 2);
+        if (!seenLabels.add(label.toLowerCase())) continue;
+
+        final subtitle = _join(
+          displayParts.where((part) => part != null && part != title),
+        );
+
+        results.add(
+          _Suggestion(
+            title: title,
+            subtitle: subtitle,
+            label: label,
+            point: LatLng(
+              double.parse(map['lat'] as String),
+              double.parse(map['lon'] as String),
+            ),
+          ),
+        );
+      }
+      return results;
+    } catch (error) {
+      lastError = 'Could not read search results: $error';
+      return const [];
+    }
   }
 
   // ---------- Reverse geocoding: always a name, never coordinates ----------
   static Future<String> reverse(LatLng point) async {
-    try {
-      final name = await _nominatimReverse(point);
-      if (name.isNotEmpty) return name;
-    } catch (_) {}
-    try {
-      final name = await _photonReverse(point);
-      if (name.isNotEmpty) return name;
-    } catch (_) {}
-    return '';
+    lastError = null;
+    final nominatim = await _nominatimReverse(point);
+    if (nominatim.isNotEmpty) {
+      lastError = null;
+      return nominatim;
+    }
+    final photon = await _photonReverse(point);
+    if (photon.isNotEmpty) lastError = null;
+    return photon;
   }
 
   static Future<String> _nominatimReverse(LatLng point) async {
@@ -178,36 +284,39 @@ class LocationService {
       'addressdetails': '1',
       'accept-language': 'en',
     });
-    final response = await http
-        .get(uri, headers: {'Accept': 'application/json'})
-        .timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) return '';
+    final response = await _get(uri);
+    if (response == null) return '';
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final address = (data['address'] as Map<String, dynamic>?) ?? {};
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final address = (data['address'] as Map<String, dynamic>?) ?? {};
 
-    final first =
-        _clean(data['name']) ??
-        _clean(address['road']) ??
-        _clean(address['pedestrian']) ??
-        _clean(address['amenity']);
-    final area =
-        _clean(address['suburb']) ??
-        _clean(address['neighbourhood']) ??
-        _clean(address['quarter']) ??
-        _clean(address['city_district']);
-    final city =
-        _clean(address['city']) ??
-        _clean(address['town']) ??
-        _clean(address['village']) ??
-        _clean(address['state']);
+      final first =
+          _clean(data['name']) ??
+          _clean(address['road']) ??
+          _clean(address['pedestrian']) ??
+          _clean(address['amenity']);
+      final area =
+          _clean(address['suburb']) ??
+          _clean(address['neighbourhood']) ??
+          _clean(address['quarter']) ??
+          _clean(address['city_district']);
+      final city =
+          _clean(address['city']) ??
+          _clean(address['town']) ??
+          _clean(address['village']) ??
+          _clean(address['state']);
 
-    final built = _join([first, area, city]);
-    if (built.isNotEmpty) return built;
+      final built = _join([first, area, city]);
+      if (built.isNotEmpty) return built;
 
-    final display = _clean(data['display_name']);
-    if (display == null) return '';
-    return _join(display.split(',').map((part) => _clean(part)));
+      final display = _clean(data['display_name']);
+      if (display == null) return '';
+      return _join(display.split(',').map((part) => _clean(part)));
+    } catch (error) {
+      lastError = 'Could not read address: $error';
+      return '';
+    }
   }
 
   static Future<String> _photonReverse(LatLng point) async {
@@ -216,21 +325,26 @@ class LocationService {
       'lon': '${point.longitude}',
       'lang': 'en',
     });
-    final response = await http.get(uri).timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) return '';
+    final response = await _get(uri);
+    if (response == null) return '';
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final features = (data['features'] as List<dynamic>?) ?? const [];
-    if (features.isEmpty) return '';
-    final props =
-        ((features.first as Map<String, dynamic>)['properties']
-            as Map<String, dynamic>?) ??
-        {};
-    return _join([
-      _clean(props['name']) ?? _clean(props['street']),
-      _clean(props['district']) ?? _clean(props['locality']),
-      _clean(props['city']) ?? _clean(props['state']),
-    ]);
+    try {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final features = (data['features'] as List<dynamic>?) ?? const [];
+      if (features.isEmpty) return '';
+      final props =
+          ((features.first as Map<String, dynamic>)['properties']
+              as Map<String, dynamic>?) ??
+          {};
+      return _join([
+        _clean(props['name']) ?? _clean(props['street']),
+        _clean(props['district']) ?? _clean(props['locality']),
+        _clean(props['city']) ?? _clean(props['state']),
+      ]);
+    } catch (error) {
+      lastError = 'Could not read address: $error';
+      return '';
+    }
   }
 }
 
@@ -257,7 +371,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   bool _loadingAddress = false;
   bool _locating = false;
   bool _searching = false;
-  List<Suggestion> _suggestions = const [];
+  List<_Suggestion> _suggestions = const [];
 
   @override
   void initState() {
@@ -300,6 +414,10 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       _address = name.isEmpty ? 'Selected location' : name;
       _loadingAddress = false;
     });
+    if (name.isEmpty && LocationService.lastError != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(LocationService.lastError!)));
+    }
   }
 
   Future<void> _goToMyLocation({bool silent = false}) async {
@@ -358,7 +476,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     });
   }
 
-  void _selectSuggestion(Suggestion suggestion) {
+  void _selectSuggestion(_Suggestion suggestion) {
     FocusScope.of(context).unfocus();
     _searchController.clear();
     _reverseDebounce?.cancel();
@@ -520,9 +638,10 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                           BoxShadow(blurRadius: 8, color: Color(0x22000000)),
                         ],
                       ),
-                      child: const Text(
-                        'No places found. Try another name.',
-                        style: TextStyle(
+                      child: Text(
+                        LocationService.lastError ??
+                            'No places found. Try another name.',
+                        style: const TextStyle(
                           color: AppColors.darkGreen,
                           fontSize: 13,
                         ),
