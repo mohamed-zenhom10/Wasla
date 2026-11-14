@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:country_code_picker/country_code_picker.dart';
+import 'package:flutter/services.dart';
+import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 import 'package:main/components/cargo_components.dart';
 import 'package:main/pages/capture_cargo_page.dart';
 import 'package:main/services/cargo_order_service.dart';
+import 'package:main/services/international_phone_number.dart';
 import 'package:main/theme/app_theme.dart';
 
 class CargoDetailsPage extends StatefulWidget {
@@ -16,11 +20,11 @@ class CargoDetailsPage extends StatefulWidget {
 class _CargoDetailsPageState extends State<CargoDetailsPage> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _descriptionController;
-  late final TextEditingController _notesController;
   late final TextEditingController _itemCountController;
   late final TextEditingController _weightController;
   late final TextEditingController _recipientNameController;
   late final TextEditingController _recipientPhoneController;
+  IsoCode _recipientPhoneCountry = IsoCode.EG;
   bool _isScheduled = false;
   DateTime? _scheduledAt;
 
@@ -28,9 +32,8 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
   void initState() {
     super.initState();
     _descriptionController = TextEditingController(
-      text: widget.draft.description,
+      text: widget.draft.cargoDescription,
     );
-    _notesController = TextEditingController(text: widget.draft.notes);
     _itemCountController = TextEditingController(
       text: '${widget.draft.itemCount}',
     );
@@ -40,9 +43,19 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
     _recipientNameController = TextEditingController(
       text: widget.draft.recipientName,
     );
-    _recipientPhoneController = TextEditingController(
-      text: widget.draft.recipientPhone,
+    final recipientPhone = InternationalPhoneNumber.split(
+      widget.draft.recipientPhone,
     );
+    if (recipientPhone != null) {
+      _recipientPhoneCountry = recipientPhone.country;
+      _recipientPhoneController = TextEditingController(
+        text: recipientPhone.nationalNumber,
+      );
+    } else {
+      _recipientPhoneController = TextEditingController(
+        text: widget.draft.recipientPhone,
+      );
+    }
     _isScheduled = widget.draft.pickupType == 'scheduled';
     _scheduledAt =
         widget.draft.scheduledAt ??
@@ -56,7 +69,6 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
   @override
   void dispose() {
     _descriptionController.dispose();
-    _notesController.dispose();
     _itemCountController.dispose();
     _weightController.dispose();
     _recipientNameController.dispose();
@@ -67,14 +79,19 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
   void _continue() {
     if (!_formKey.currentState!.validate()) return;
     widget.draft
-      ..description = _descriptionController.text.trim()
-      ..notes = _notesController.text.trim()
+      ..cargoDescription = _descriptionController.text.trim()
       ..itemCount = int.parse(_itemCountController.text.trim())
       ..weightKg = _weightController.text.trim().isEmpty
           ? null
           : double.parse(_weightController.text.trim())
       ..recipientName = _recipientNameController.text.trim()
-      ..recipientPhone = _recipientPhoneController.text.trim()
+      ..recipientPhone = widget.draft.farePaidBy == 'recipient'
+          ? (InternationalPhoneNumber.toE164(
+                _recipientPhoneController.text,
+                _recipientPhoneCountry,
+              ) ??
+              '')
+          : ''
       ..pickupType = _isScheduled ? 'scheduled' : 'now'
       ..scheduledAt = _isScheduled ? _scheduledAt : null;
     widget.draft.fieldErrors.clear();
@@ -276,26 +293,98 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
                     : null,
               ),
               const SizedBox(height: 12),
-              CargoTextField(
-                label: 'Recipient phone',
-                controller: _recipientPhoneController,
-                keyboardType: TextInputType.phone,
-                errorText: widget.draft.fieldErrors['recipientPhone'],
-                validator: (value) =>
-                    widget.draft.farePaidBy == 'recipient' &&
-                        (value ?? '').trim().isEmpty
-                    ? 'Enter the recipient phone'
-                    : null,
+              Text('Recipient phone', style: AppTypography.labelMd),
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.light,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: AppColors.borderLight),
+                ),
+                child: Row(
+                  children: [
+                    CountryCodePicker(
+                      initialSelection: _recipientPhoneCountry.name,
+                      favorite: const ['+20', 'US'],
+                      countryFilter: IsoCode.values
+                          .map((isoCode) => isoCode.name)
+                          .toList(growable: false),
+                      showCountryOnly: false,
+                      showOnlyCountryWhenClosed: false,
+                      showDropDownButton: true,
+                      showFlag: true,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      textStyle: AppTypography.bodySm,
+                      dialogTextStyle: AppTypography.bodySm,
+                      searchStyle: AppTypography.bodySm,
+                      dialogBackgroundColor: AppColors.white,
+                      onChanged: (country) {
+                        final isoCode = country.code;
+                        if (isoCode == null) return;
+                        final matchedCountries = IsoCode.values.where(
+                          (iso) => iso.name == isoCode,
+                        );
+                        if (matchedCountries.isEmpty) return;
+                        setState(() {
+                          _recipientPhoneCountry = matchedCountries.first;
+                        });
+                        _formKey.currentState?.validate();
+                      },
+                    ),
+                    Container(
+                      width: 1,
+                      height: 28,
+                      color: AppColors.borderLight,
+                    ),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _recipientPhoneController,
+                        keyboardType: TextInputType.phone,
+                        textInputAction: TextInputAction.next,
+                        style: AppTypography.bodyMd,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9\s()-]'),
+                          ),
+                        ],
+                        validator: (value) {
+                          if (widget.draft.farePaidBy != 'recipient') {
+                            return null;
+                          }
+                          if (InternationalPhoneNumber.parse(
+                                value ?? '',
+                                _recipientPhoneCountry,
+                              ) ==
+                              null) {
+                            return 'Enter a valid phone number for the selected country';
+                          }
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Phone number',
+                          hintStyle: AppTypography.bodySm.copyWith(
+                            color: AppColors.gray,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          focusedErrorBorder: InputBorder.none,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 16,
+                          ),
+                          errorText:
+                              widget.draft.fieldErrors['recipientPhone'],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
             const SizedBox(height: 18),
-            CargoTextField(
-              label: 'Special instructions (optional)',
-              hint: 'Fragile items, stairs, access notes...',
-              controller: _notesController,
-              icon: Icons.sticky_note_2_outlined,
-              maxLines: 3,
-            ),
             const SizedBox(height: 14),
             const Text(
               'Accurate details help us find a suitable vehicle.',

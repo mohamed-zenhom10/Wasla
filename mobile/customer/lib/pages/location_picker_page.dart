@@ -16,8 +16,8 @@ class PickedLocation {
   final LatLng point;
 }
 
-class _Suggestion {
-  const _Suggestion({
+class Suggestion {
+  const Suggestion({
     required this.title,
     required this.subtitle,
     required this.label,
@@ -91,7 +91,7 @@ class LocationService {
   }
 
   // ---------- Search (Photon, OpenStreetMap data) ----------
-  static Future<List<_Suggestion>> search(String query, LatLng bias) async {
+  static Future<List<Suggestion>> search(String query, LatLng bias) async {
     final uri = Uri.https('photon.komoot.io', '/api/', {
       'q': query,
       'limit': '8',
@@ -106,7 +106,7 @@ class LocationService {
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     final features = (data['features'] as List<dynamic>?) ?? const [];
-    final results = <_Suggestion>[];
+    final results = <Suggestion>[];
     final seenLabels = <String>{};
 
     for (final item in features) {
@@ -142,7 +142,7 @@ class LocationService {
       if (!seenLabels.add(label.toLowerCase())) continue;
 
       results.add(
-        _Suggestion(
+        Suggestion(
           title: title,
           subtitle: subtitle,
           label: label,
@@ -257,7 +257,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   bool _loadingAddress = false;
   bool _locating = false;
   bool _searching = false;
-  List<_Suggestion> _suggestions = const [];
+  List<Suggestion> _suggestions = const [];
 
   @override
   void initState() {
@@ -358,7 +358,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     });
   }
 
-  void _selectSuggestion(_Suggestion suggestion) {
+  void _selectSuggestion(Suggestion suggestion) {
     FocusScope.of(context).unfocus();
     _searchController.clear();
     _reverseDebounce?.cancel();

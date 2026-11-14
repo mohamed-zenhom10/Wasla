@@ -15,12 +15,14 @@ class CargoPhotoDraft {
 }
 
 class CargoOrderDraft {
+  // Core booking flow fields aligned with Shipment model
   String category = '';
   String? categoryId;
   String? sizeOptionId;
-  String description = '';
-  String pickup = '';
-  String destination = '';
+  // Fix: Use cargoDescription to match Shipment model field name
+  String cargoDescription = '';
+  String pickupAddress = '';
+  String dropoffAddress = '';
   double? pickupLatitude;
   double? pickupLongitude;
   double? dropoffLatitude;
@@ -28,13 +30,13 @@ class CargoOrderDraft {
   String pickupNotes = '';
   String dropoffNotes = '';
   String size = 'Medium';
-  String notes = '';
+  // Remove cargo notes field (requirement #7)
   int itemCount = 1;
   bool isFragile = false;
   double? weightKg;
   int helpersCount = 0;
   String pickupType = 'now';
-  String? vehicleId;
+  String? requestedVehicleTypeId;
   DateTime? scheduledAt;
   String paymentMethod = 'cash';
   String farePaidBy = 'sender';
@@ -48,6 +50,20 @@ class CargoOrderDraft {
   final List<CargoPhotoDraft> photos = [];
   final Map<String, String> fieldErrors = {};
   final List<String> stops = [];
+
+  // Helper method to access cargoDescription for compatibility
+  String get description => cargoDescription;
+  set description(String value) => cargoDescription = value;
+
+  // Compatibility aliases for fields renamed to align with Shipment model.
+  String get pickup => pickupAddress;
+  set pickup(String value) => pickupAddress = value;
+
+  String get destination => dropoffAddress;
+  set destination(String value) => dropoffAddress = value;
+
+  String? get vehicleId => requestedVehicleTypeId;
+  set vehicleId(String? value) => requestedVehicleTypeId = value;
 
   bool get hasSamplePhoto => photos.isNotEmpty;
 }

@@ -163,6 +163,7 @@ class Shipment {
     this.photos = const [],
     this.quotes = const [],
     this.acceptedQuote,
+    this.trip,
     this.timeline = const [],
   });
 
@@ -193,6 +194,7 @@ class Shipment {
   final List<ShipmentPhoto> photos;
   final List<ShipmentQuote> quotes;
   final ShipmentQuote? acceptedQuote;
+  final ShipmentTrip? trip;
   final List<ShipmentTimelineEntry> timeline;
 
   bool get isEditable => status == 'draft' && acceptedQuote == null;
@@ -262,7 +264,74 @@ class Shipment {
       acceptedQuote: parseMap(json['acceptedQuote']) == null
           ? null
           : ShipmentQuote.fromJson(parseMap(json['acceptedQuote'])!),
+      trip: parseMap(json['trip']) == null
+          ? null
+          : ShipmentTrip.fromJson(parseMap(json['trip'])!),
       timeline: parseList(json['timeline'], ShipmentTimelineEntry.fromJson),
+    );
+  }
+}
+
+class ShipmentTrip {
+  const ShipmentTrip({
+    required this.id,
+    required this.status,
+    this.driverId,
+    this.driverName,
+    this.driverPhone,
+    this.vehicleTypeId,
+    this.plateNumber,
+    this.make,
+    this.model,
+    this.color,
+    this.plannedStartAt,
+    this.startedAt,
+    this.loadedAt,
+    this.deliveredAt,
+  });
+
+  final String id;
+  final String status;
+  final String? driverId;
+  final String? driverName;
+  final String? driverPhone;
+  final String? vehicleTypeId;
+  final String? plateNumber;
+  final String? make;
+  final String? model;
+  final String? color;
+  final DateTime? plannedStartAt;
+  final DateTime? startedAt;
+  final DateTime? loadedAt;
+  final DateTime? deliveredAt;
+
+  factory ShipmentTrip.fromJson(Map<String, dynamic> json) {
+    final driver = json['driver'] is Map
+        ? Map<String, dynamic>.from(json['driver'] as Map)
+        : null;
+    final vehicle = json['vehicle'] is Map
+        ? Map<String, dynamic>.from(json['vehicle'] as Map)
+        : null;
+    return ShipmentTrip(
+      id: json['id']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
+      driverId: driver?['id']?.toString() ?? json['driverId']?.toString(),
+      driverName: driver?['name']?.toString() ?? json['driverName']?.toString(),
+      driverPhone:
+          driver?['phone']?.toString() ?? json['driverPhone']?.toString(),
+      vehicleTypeId:
+          vehicle?['vehicleTypeId']?.toString() ??
+          json['vehicleTypeId']?.toString(),
+      plateNumber: vehicle?['plateNumber']?.toString(),
+      make: vehicle?['make']?.toString(),
+      model: vehicle?['model']?.toString(),
+      color: vehicle?['color']?.toString(),
+      plannedStartAt: DateTime.tryParse(
+        (json['plannedStartAt'] ?? json['plannedStart'])?.toString() ?? '',
+      ),
+      startedAt: DateTime.tryParse(json['startedAt']?.toString() ?? ''),
+      loadedAt: DateTime.tryParse(json['loadedAt']?.toString() ?? ''),
+      deliveredAt: DateTime.tryParse(json['deliveredAt']?.toString() ?? ''),
     );
   }
 }
@@ -444,6 +513,55 @@ class ShipmentCatalog {
       minScheduleLeadMinutes: settings is Map
           ? (settings['minScheduleLeadMinutes'] as num?)?.toInt() ?? 30
           : 30,
+    );
+  }
+}
+class ShipmentTracking {
+  const ShipmentTracking({
+    required this.shipmentStatus,
+    this.tripId,
+    this.tripStatus,
+    this.signal,
+    this.nextStop,
+    this.driverLocation,
+    this.driverAccuracyM,
+    this.distanceToNextStopM,
+  });
+
+  final String shipmentStatus;
+  final String? tripId;
+  final String? tripStatus;
+  final String? signal;
+  final String? nextStop;
+  final ShipmentLocation? driverLocation;
+  final double? driverAccuracyM;
+  final int? distanceToNextStopM;
+
+  factory ShipmentTracking.fromJson(Map<String, dynamic> json) {
+    final raw = json['tracking'] is Map
+        ? Map<String, dynamic>.from(json['tracking'] as Map)
+        : json;
+    final location = raw['driverLocation'];
+    ShipmentLocation? driverLocation;
+    double? accuracy;
+    if (location is Map) {
+      final map = Map<String, dynamic>.from(location);
+      driverLocation = ShipmentLocation(
+        address: '',
+        latitude: (map['lat'] as num?)?.toDouble() ?? 0,
+        longitude: (map['lng'] as num?)?.toDouble() ?? 0,
+      );
+      accuracy = (map['accuracyM'] as num?)?.toDouble();
+    }
+    return ShipmentTracking(
+      shipmentStatus: raw['shipmentStatus']?.toString() ?? '',
+      tripId: raw['tripId']?.toString(),
+      tripStatus: raw['tripStatus']?.toString(),
+      signal: raw['signal']?.toString(),
+      nextStop: raw['nextStop']?.toString(),
+      driverLocation: driverLocation,
+      driverAccuracyM: accuracy,
+      distanceToNextStopM: (raw['distanceToNextStopM'] as num?)?.toInt(),
     );
   }
 }

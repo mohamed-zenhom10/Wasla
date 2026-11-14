@@ -251,6 +251,42 @@ class ShipmentService {
     );
   }
 
+  Future<Shipment> requestShipment(Shipment shipment) async {
+    return Shipment.fromResponse(
+      await _request(
+        method: 'POST',
+        endpoint: '/shipments/${shipment.id}/request',
+      ),
+    );
+  }
+
+  Future<Shipment> cancelShipment(
+    Shipment shipment, {
+    String? reason,
+    bool acceptFee = false,
+  }) async {
+    final body = <String, dynamic>{};
+    if (reason != null && reason.trim().isNotEmpty) {
+      body['reason'] = reason.trim();
+    }
+    if (acceptFee) body['acceptFee'] = true;
+    final response = await _request(
+      method: 'POST',
+      endpoint: '/shipments/${shipment.id}/cancel',
+      body: body.isEmpty ? null : body,
+    );
+    if (response['shipment'] is Map) return Shipment.fromResponse(response);
+    return getShipment(shipment.id);
+  }
+
+  Future<ShipmentTracking> getTracking(String shipmentId) async =>
+      ShipmentTracking.fromJson(
+        await _request(
+          method: 'GET',
+          endpoint: '/shipments/$shipmentId/tracking',
+        ),
+      );
+
   Future<Shipment> withdrawPrice(Shipment shipment) async {
     if (shipment.acceptedQuote == null) {
       throw const ShipmentApiException(

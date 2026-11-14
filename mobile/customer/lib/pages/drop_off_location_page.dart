@@ -24,9 +24,11 @@ class _DropOffLocationPageState extends State<DropOffLocationPage> {
   @override
   void initState() {
     super.initState();
-    _pickupController = TextEditingController(text: widget.draft.pickup);
+    _pickupController = TextEditingController(
+      text: widget.draft.pickupAddress,
+    );
     _destinationController = TextEditingController(
-      text: widget.draft.destination,
+      text: widget.draft.dropoffAddress,
     );
   }
 
@@ -54,8 +56,8 @@ class _DropOffLocationPageState extends State<DropOffLocationPage> {
       return;
     }
     widget.draft
-      ..pickup = _pickupController.text.trim()
-      ..destination = _destinationController.text.trim();
+      ..pickupAddress = _pickupController.text.trim()
+      ..dropoffAddress = _destinationController.text.trim();
     widget.draft.fieldErrors.remove('pickup');
     widget.draft.fieldErrors.remove('dropoff');
     Navigator.of(context).push(
@@ -68,8 +70,8 @@ class _DropOffLocationPageState extends State<DropOffLocationPage> {
   void _addStop() {
     if (!_formKey.currentState!.validate()) return;
     widget.draft
-      ..pickup = _pickupController.text.trim()
-      ..destination = _destinationController.text.trim();
+      ..pickupAddress = _pickupController.text.trim()
+      ..dropoffAddress = _destinationController.text.trim();
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => MultiStopRoutePage(draft: widget.draft),

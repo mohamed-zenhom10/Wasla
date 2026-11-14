@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
 import 'package:main/models/shipment.dart';
+import 'package:main/pages/driver_matching_page.dart';
 import 'package:main/pages/cargo_category_page.dart';
 import 'package:main/pages/vehicle_small_page.dart';
 import 'package:main/services/cargo_order_service.dart';
@@ -43,6 +44,29 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
       _shipment = await _service.getShipment(widget.shipmentId);
     } on ShipmentApiException catch (error) {
       _errorMessage = error.message;
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _requestShipment() async {
+    final shipment = _shipment;
+    if (shipment == null || _isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final updated = await _service.requestShipment(shipment);
+      if (!mounted) return;
+      setState(() => _shipment = updated);
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => DriverMatchingPage(shipmentId: updated.id),
+        ),
+      );
+    } on ShipmentApiException catch (error) {
+      if (mounted) setState(() => _errorMessage = error.message);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -233,14 +257,26 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
                   ]),
                 ],
                 const SizedBox(height: 18),
-                if (shipment.acceptedQuote != null)
+                if (shipment.acceptedQuote != null) ...[
+                  if (shipment.status != 'searching_driver' &&
+                      shipment.status != 'driver_assigned' &&
+                      shipment.status != 'in_progress' &&
+                      shipment.status != 'delivered') ...[
+                    WaslaButton(
+                      text: 'Confirm shipment',
+                      variant: WaslaButtonVariant.primary,
+                      isLoading: _isLoading,
+                      onPressed: _isLoading ? null : _requestShipment,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   WaslaButton(
                     text: 'Withdraw accepted price',
                     variant: WaslaButtonVariant.secondary,
                     isLoading: _isLoading,
                     onPressed: _isLoading ? null : _withdrawPrice,
-                  )
-                else if (shipment.isEditable) ...[
+                  ),
+                ] else if (shipment.isEditable) ...[
                   WaslaButton(
                     text: 'Edit draft shipment',
                     variant: WaslaButtonVariant.primary,

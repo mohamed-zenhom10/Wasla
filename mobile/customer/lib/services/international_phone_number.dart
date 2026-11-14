@@ -22,4 +22,26 @@ class InternationalPhoneNumber {
 
   static String? toE164(String nationalNumber, IsoCode country) =>
       parse(nationalNumber, country)?.international;
+
+  static ({IsoCode country, String nationalNumber})? split(String value) {
+    final input = value.trim();
+    if (input.isEmpty) return null;
+
+    try {
+      final phone = PhoneNumber.parse(input);
+      if (phone.isValid()) {
+        return (country: phone.isoCode, nationalNumber: phone.nsn);
+      }
+    } on PhoneNumberException {
+      // Fall through to country-specific parsing for national numbers.
+    }
+
+    for (final country in IsoCode.values) {
+      final parsed = parse(input, country);
+      if (parsed != null) {
+        return (country: country, nationalNumber: parsed.nsn);
+      }
+    }
+    return null;
+  }
 }
