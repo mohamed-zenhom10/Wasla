@@ -667,9 +667,14 @@ Errors: `PRICE_NOT_ACCEPTED`, `PRICE_TOO_OLD` (the pickup time passed, withdraw 
 { "reason": "Changed my mind" }
 ```
 
-`reason` is optional. Only a `draft` or `searching_driver` shipment, later cancelling comes with the trips.
+`reason` is optional.
 
-Errors: `WRONG_STATUS`
+- `draft` or `searching_driver`: cancelled for free.
+- A driver accepted but did not start yet (`trip.status` is `assigned`): cancelled for free.
+- The driver is on the way (`heading_to_pickup` or `arrived_at_pickup`): there is a fee (`cancellationFee` in settings, 50 EGP). The first call returns `CANCEL_FEE` with `fee`. Show it to the customer, and if they agree send again with `"acceptFee": true`. The fee is taken from the customer wallet and goes to the driver. A wallet below zero blocks new requests until it is paid.
+- After loading the customer cannot cancel.
+
+Errors: `CANCEL_FEE` (with `fee`), `CARGO_LOADED`, `WRONG_STATUS`
 
 ## Admin
 
@@ -808,6 +813,62 @@ Errors: `APPROVAL_INCOMPLETE` (has `missing`), `WRONG_STATUS` (only a `pending` 
 A draft is not shown to anyone. After publishing, the text cannot change (make a new version), and every customer and driver gets `needsPolicyAcceptance: true` until they accept it.
 
 Errors: `DRAFT_EXISTS` (only one draft per type, the error has its `id`), `ALREADY_PUBLISHED`
+
+### Trips
+
+#### GET /admin/trips?status=active&search=&page=1
+
+`status` is `active` (default), `finished` or `all`. `search` matches the trip number, the shipment number, or the driver's or customer's name or phone. 20 per page. Returns `trips`, `page`, `pageSize`, `total`:
+
+```json
+{ "id": "7", "status": "heading_to_pickup", "shipmentId": "12", "fareAmount": "630.18",
+  "driver": { "id": "15", "name": "Ahmed Ali" }, "customer": { "id": "9", "name": "Mariam Adel" },
+  "plannedStartAt": "...", "startedAt": "...", "deliveredAt": null, "cancelledAt": null,
+  "cancellationParty": null, "createdAt": "..." }
+```
+
+#### GET /admin/trips/:id
+
+The trip as the driver sees it (see Driver trips), plus:
+
+- `driver` (id, name, phone) and `vehicle`. The phones are always there for the admin.
+- `isLateCancellation`, `cancellationFee`, `finalCommission`, `finalDriverEarning` (the last two after delivery).
+- `timeline`: every status change with `by` (`customer`, `driver`, `admin` or `system`) and `reason`.
+- `path`: every location the driver sent during the trip, oldest first, for drawing the route.
+- `tracking`: the same as `GET /shipments/:id/tracking`.
+
+#### POST /admin/trips/:id/cancel
+
+```json
+{ "reason": "Driver not answering" }
+```
+
+`reason` is needed. Only before loading. The shipment goes back to searching for another driver, not the same one. After loading it needs a support ticket (comes with support).
+
+Errors: `CARGO_LOADED`, `TRIP_FINISHED`, `INVALID_INPUT`
+
+#### POST /admin/trips/:id/new-code
+
+No body. When the driver entered 5 wrong codes, this makes a new code for the shipment and gives the driver 5 tries again. The customer sees the new code in `GET /shipments/:id`; tell them to share it with the recipient.
+
+Errors: `CODE_NOT_LOCKED` (the trip is not at the drop-off, or it still has tries)
+
+### Live map
+
+#### GET /admin/map
+
+The drivers to show on the live map: everyone online, and everyone in a running trip even if offline.
+
+```json
+{ "drivers": [ {
+  "id": "15", "name": "Ahmed Ali", "phone": "+201055512345", "online": true, "signal": "live",
+  "location": { "lat": 30.0561, "lng": 31.3301, "updatedAt": "..." },
+  "vehicle": { "vehicleTypeId": "2", "plateNumber": "ABC 123" },
+  "trip": { "id": "7", "status": "heading_to_pickup", "shipmentId": "12" }
+} ] }
+```
+
+`signal` is `lost` when the driver sent nothing for `locationStaleSeconds`. `trip` is null when the driver is waiting for requests. Call it every 15 seconds.
 
 ## Too many tries
 

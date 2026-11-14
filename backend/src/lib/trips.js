@@ -5,6 +5,7 @@ import { POINT_SQL } from './route.js';
 
 export const EXECUTING = ['heading_to_pickup', 'arrived_at_pickup', 'loaded', 'heading_to_dropoff', 'arrived_at_dropoff'];
 export const FINISHED = ['delivered', 'cancelled'];
+export const BEFORE_LOADING = ['assigned', 'heading_to_pickup', 'arrived_at_pickup'];
 
 export const JOB_COLUMNS = `s.id AS shipment_id, s.cargo_category_id, s.size_option_id, s.cargo_description,
   s.item_count, s.is_fragile, s.weight_kg, s.helpers_count,
@@ -18,7 +19,7 @@ export const JOB_COLUMNS = `s.id AS shipment_id, s.cargo_category_id, s.size_opt
   round(q.amount * q.commission_rate, 2) AS commission_amount,
   q.amount - round(q.amount * q.commission_rate, 2) AS driver_earning`;
 
-const TRIP_SQL = `SELECT t.id, t.status, t.planned_start_at, t.planned_end_at, t.started_at, t.loaded_at,
+export const TRIP_SQL = `SELECT t.id, t.status, t.planned_start_at, t.planned_end_at, t.started_at, t.loaded_at,
     t.delivered_at, t.cancelled_at, t.cancellation_party, t.cancellation_reason, t.vehicle_fit,
     t.delivery_code_verified_at, t.created_at,
     GREATEST(0, ps.max_delivery_code_attempts - t.delivery_code_attempts) AS code_attempts_left,
@@ -90,7 +91,7 @@ export function toTrip(row) {
   };
 }
 
-async function withPhotos(trip, baseUrl) {
+export async function withPhotos(trip, baseUrl) {
   const { rows } = await query(
     'SELECT id, stage, storage_key, uploaded_at FROM trip_photos WHERE trip_id = $1 ORDER BY id',
     [trip.id],
@@ -185,6 +186,17 @@ export async function loadTracking(shipmentId) {
     } : null,
     distanceToNextStopM: row.recorded_at ? row.distance_m : null,
   };
+}
+
+export async function lockLiveTrip(client, shipmentId) {
+  const { rows: [trip] } = await client.query(
+    `SELECT t.id, t.status, ps.cancellation_fee
+     FROM trips t CROSS JOIN platform_settings ps
+     WHERE t.shipment_id = $1 AND t.status <> 'cancelled'
+     FOR UPDATE OF t`,
+    [shipmentId],
+  );
+  return trip || null;
 }
 
 export async function shipmentTrip(shipmentId) {

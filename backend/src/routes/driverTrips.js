@@ -16,13 +16,12 @@ import {
   closeOldOffers, makeOffers, listOffers, createTrip,
 } from '../lib/dispatch.js';
 import {
-  EXECUTING, FINISHED, loadTrip, currentTrip, listTrips, trackPoint,
+  EXECUTING, FINISHED, BEFORE_LOADING, loadTrip, currentTrip, listTrips, trackPoint,
 } from '../lib/trips.js';
 
 const router = Router();
 const PAGE_SIZE = 20;
 const MAX_PHOTOS = 6;
-const BEFORE_LOADING = ['assigned', 'heading_to_pickup', 'arrived_at_pickup'];
 const PHOTO_STATUS = { pickup: 'arrived_at_pickup', delivery: 'arrived_at_dropoff' };
 const imageBody = express.raw({ type: IMAGE_TYPES, limit: `${MAX_IMAGE_MB}mb` });
 

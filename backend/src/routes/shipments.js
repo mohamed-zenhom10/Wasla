@@ -11,7 +11,7 @@ import {
   shipmentFields, stateOf, buildColumns, insertShipment, updateShipment, priceShipment, loadShipment, lockShipment,
   requireDraft, toShipmentSummary, SUMMARY_SQL, STATUS_FILTERS,
 } from '../lib/shipments.js';
-import { loadTracking } from '../lib/trips.js';
+import { BEFORE_LOADING, loadTracking, lockLiveTrip } from '../lib/trips.js';
 
 const router = Router();
 const PAGE_SIZE = 20;
@@ -254,13 +254,29 @@ router.post('/:id/cancel', async (req, res) => {
   const body = bodyOf(req);
   const reason = body.reason === undefined ? null : cleanOptionalText(body.reason, 'reason', 500);
   await withTransaction(actorOf(req, reason), async (client) => {
+    const firstTrip = await lockLiveTrip(client, id);
     const row = await lockShipment(client, id, req.user.id);
-    if (row.status !== 'draft' && row.status !== 'searching_driver') {
+    if (row.status === 'draft' || row.status === 'searching_driver') {
+      await client.query(
+        "UPDATE shipments SET status = 'cancelled', cancellation_reason = $2 WHERE id = $1",
+        [id, reason],
+      );
+      return;
+    }
+    if (row.status !== 'driver_assigned' && row.status !== 'in_progress') {
       throw new AppError(409, 'WRONG_STATUS', `The shipment is ${row.status}`, { status: row.status });
     }
+    const trip = firstTrip || await lockLiveTrip(client, id);
+    if (!BEFORE_LOADING.includes(trip.status)) {
+      throw new AppError(409, 'CARGO_LOADED', 'The cargo is loaded, contact support to cancel');
+    }
+    if (trip.status !== 'assigned' && body.acceptFee !== true) {
+      throw new AppError(409, 'CANCEL_FEE', 'The driver is on the way, cancelling now has a fee',
+        { fee: trip.cancellation_fee });
+    }
     await client.query(
-      "UPDATE shipments SET status = 'cancelled', cancellation_reason = $2 WHERE id = $1",
-      [id, reason],
+      "UPDATE trips SET status = 'cancelled', cancellation_reason = $2 WHERE id = $1",
+      [trip.id, reason],
     );
   });
   await reply(req, res, id);
