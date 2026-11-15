@@ -75,7 +75,6 @@ class BookingReviewPage extends StatelessWidget {
                     _row('Category', draft.category),
                     _row('Description', draft.description),
                     _row('Size', draft.size),
-                    _row('Notes', draft.notes),
                   ]),
                   const SizedBox(height: 12),
                   _section('Route', [

@@ -87,6 +87,10 @@ class HomeScreenState extends State<HomeScreen> {
     final draft = CargoOrderDraft()
       ..pickup = _pickupController.text.trim()
       ..destination = _destinationController.text.trim()
+      ..pickupLatitude = _pickupPoint?.latitude
+      ..pickupLongitude = _pickupPoint?.longitude
+      ..dropoffLatitude = _destinationPoint?.latitude
+      ..dropoffLongitude = _destinationPoint?.longitude
       ..useAiEstimate = useAiEstimate;
     setState(() => _activeBookingDraft = draft);
     Navigator.of(context).push(

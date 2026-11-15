@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
 import 'package:main/pages/chat_page.dart';
-import 'package:main/pages/tracking_driver_arriving_page.dart';
 import 'package:main/routing/app_route.dart';
 import 'package:main/services/mock_data.dart';
 import 'package:main/theme/app_theme.dart';
@@ -185,9 +184,9 @@ class _DriverProfilePageState extends State<DriverProfilePage> {
           WaslaButton(
             text: 'Confirm and track',
             variant: WaslaButtonVariant.primary,
-            onPressed: () => Navigator.of(context).push(
-              TAMaterialRoute<void>(
-                builder: (_) => const TrackingDriverArrivingPage(),
+            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Tracking requires an active shipment.'),
               ),
             ),
           ),

@@ -465,6 +465,102 @@ void main() {
       expect(requests, 0);
     },
   );
+
+  test('requests a driver for an accepted-price shipment', () async {
+    AuthService.replaceHttpClientForTesting(
+      MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/api/shipments/12/request');
+        return _response({
+          'shipment': {'id': '12', 'status': 'searching_driver'},
+        });
+      }),
+    );
+
+    final shipment = await service.requestShipment(
+      Shipment.fromJson({'id': '12', 'status': 'draft'}),
+    );
+
+    expect(shipment.status, 'searching_driver');
+  });
+
+  test('loads shipment tracking data', () async {
+    AuthService.replaceHttpClientForTesting(
+      MockClient((request) async {
+        expect(request.method, 'GET');
+        expect(request.url.path, '/api/shipments/12/tracking');
+        return _response({
+          'tracking': {
+            'shipmentStatus': 'in_progress',
+            'tripId': '7',
+            'tripStatus': 'heading_to_dropoff',
+            'signal': 'live',
+            'nextStop': 'dropoff',
+            'driverLocation': {'lat': 30.0213, 'lng': 31.2219, 'accuracyM': 12.5},
+            'distanceToNextStopM': 4120,
+          },
+        });
+      }),
+    );
+
+    final tracking = await service.getTracking('12');
+
+    expect(tracking.shipmentStatus, 'in_progress');
+    expect(tracking.tripId, '7');
+    expect(tracking.driverLocation?.latitude, 30.0213);
+  });
+
+  test('cancels a shipment through the cancel endpoint', () async {
+    AuthService.replaceHttpClientForTesting(
+      MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/api/shipments/12/cancel');
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        expect(body['reason'], 'Changed my mind');
+        return _response({
+          'shipment': {'id': '12', 'status': 'cancelled'},
+        });
+      }),
+    );
+
+    final shipment = await service.cancelShipment(
+      Shipment.fromJson({'id': '12', 'status': 'draft'}),
+      reason: 'Changed my mind',
+    );
+
+    expect(shipment.status, 'cancelled');
+  });
+
+  test('parses an accepted trip from shipment details', () async {
+    AuthService.replaceHttpClientForTesting(
+      MockClient((request) async {
+        return _response({
+          'shipment': {
+            'id': '12',
+            'status': 'driver_assigned',
+            'trip': {
+              'id': '7',
+              'status': 'assigned',
+              'driver': {'id': '15', 'name': 'Ahmed Ali', 'phone': '+201055512345'},
+              'vehicle': {
+                'vehicleTypeId': '2',
+                'plateNumber': 'ABC 123',
+                'make': 'Suzuki',
+                'model': 'Carry',
+                'color': 'White',
+              },
+            },
+          },
+        });
+      }),
+    );
+
+    final shipment = await service.getShipment('12');
+
+    expect(shipment.trip?.id, '7');
+    expect(shipment.trip?.driverName, 'Ahmed Ali');
+    expect(shipment.trip?.plateNumber, 'ABC 123');
+  });
 }
 
 ShipmentCatalog _catalog() => const ShipmentCatalog(

@@ -1,21 +1,87 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
-import 'package:main/pages/chat_page.dart';
+import 'package:main/models/shipment.dart';
 import 'package:main/pages/tracking_shipment_stages_page.dart';
 import 'package:main/routing/app_route.dart';
-import 'package:main/services/mock_data.dart';
+import 'package:main/services/shipment_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class TrackingInTransitPage extends StatefulWidget {
-  const TrackingInTransitPage({super.key});
+  const TrackingInTransitPage({super.key, this.shipmentId});
+
+  final String? shipmentId;
 
   @override
   State<TrackingInTransitPage> createState() => _TrackingInTransitPageState();
 }
 
 class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
+  final _service = ShipmentService();
+  Shipment? _shipment;
+  ShipmentTracking? _tracking;
+  String? _errorMessage;
+  bool _isLoading = true;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _timer = Timer.periodic(const Duration(seconds: 10), (_) => _load(silent: true));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (widget.shipmentId == null || !mounted) return;
+    if (!silent) setState(() => _isLoading = true);
+    try {
+      final shipment = await _service.getShipment(widget.shipmentId!);
+      ShipmentTracking? tracking;
+      try {
+        tracking = await _service.getTracking(widget.shipmentId!);
+      } on ShipmentApiException {
+        tracking = null;
+      }
+      if (!mounted) return;
+      setState(() {
+        _shipment = shipment;
+        _tracking = tracking;
+        _errorMessage = null;
+      });
+      final terminal = shipment.status == 'delivered' ||
+          shipment.status == 'cancelled' ||
+          shipment.trip == null && shipment.status == 'searching_driver';
+      if (terminal) _timer?.cancel();
+    } on ShipmentApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _errorMessage = error.message);
+    } finally {
+      if (mounted && !silent) setState(() => _isLoading = false);
+    }
+  }
+
+  String _driverName() => _shipment?.trip?.driverName ?? 'Driver not assigned';
+  String _vehicle() {
+    final trip = _shipment?.trip;
+    if (trip == null) return 'Vehicle not assigned';
+    return [
+      if (trip.make != null) trip.make,
+      if (trip.model != null) trip.model,
+      if (trip.plateNumber != null) trip.plateNumber,
+    ].whereType<String>().join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final shipment = _shipment;
+    final tracking = _tracking;
     return Scaffold(
       backgroundColor: AppColors.white,
       body: SafeArea(
@@ -24,22 +90,30 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
           children: [
             _buildHeader(),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                children: [
-                  const SizedBox(height: 16),
-                  _buildMapCard(),
-                  const SizedBox(height: 12),
-                  _buildProgressCard(),
-                  const SizedBox(height: 12),
-                  _buildDriverCard(),
-                  const SizedBox(height: 12),
-                  _buildRouteCard(),
-                  const SizedBox(height: 24),
-                ],
-              ),
+              child: _isLoading && shipment == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      children: [
+                        const SizedBox(height: 16),
+                        _buildMapCard(tracking),
+                        const SizedBox(height: 12),
+                        _buildStatusCard(shipment, tracking),
+                        const SizedBox(height: 12),
+                        _buildTrackingCard(tracking),
+                        const SizedBox(height: 12),
+                        _buildDriverCard(shipment),
+                        const SizedBox(height: 12),
+                        _buildRouteCard(shipment),
+                        if (_errorMessage != null) ...[
+                          const SizedBox(height: 12),
+                          Text(_errorMessage!, style: const TextStyle(color: AppColors.accent)),
+                        ],
+                        const SizedBox(height: 24),
+                      ],
+                    ),
             ),
-            _buildActions(),
+            _buildActions(shipment),
           ],
         ),
       ),
@@ -65,38 +139,28 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
     );
   }
 
-  Widget _buildMapCard() {
+  Widget _buildMapCard(ShipmentTracking? tracking) {
+    final location = tracking?.driverLocation;
     return Container(
-      height: 200,
+      height: 160,
       decoration: BoxDecoration(
         color: AppColors.light,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Stack(
-        children: [
-          const Positioned.fill(child: CustomPaint(painter: _MapPainter())),
-          const Align(
-            alignment: Alignment(-0.3, -0.4),
-            child: Text('NASR CITY', style: TextStyle(fontSize: 10)),
-          ),
-          const Align(
-            alignment: Alignment(0, 0.6),
-            child: Text('MAADI', style: TextStyle(fontSize: 10)),
-          ),
-          Align(
-            alignment: Alignment(0.0, 0.2),
-            child: Icon(Icons.local_shipping, color: AppColors.accent, size: 28),
-          ),
-          Align(
-            alignment: Alignment(0.4, 0.5),
-            child: Icon(Icons.location_on, color: AppColors.darkGreen, size: 32),
-          ),
-        ],
+      child: Center(
+        child: location == null
+            ? const Text('Driver location unavailable')
+            : Text(
+                'Driver: ${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)}',
+                style: AppTypography.bodySm,
+              ),
       ),
     );
   }
 
-  Widget _buildProgressCard() {
+  Widget _buildStatusCard(Shipment? shipment, ShipmentTracking? tracking) {
+    final status = shipment?.status ?? 'unknown';
+    final tripStatus = tracking?.tripStatus ?? shipment?.trip?.status ?? '—';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -106,99 +170,103 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
       ),
       child: Column(
         children: [
-          Text(
-            'In transit',
-            style: AppTypography.headingSm,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: TrackingMock.progress,
-              minHeight: 6,
-              backgroundColor: AppColors.white,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accent),
-            ),
-          ),
+          Text(status, style: AppTypography.headingSm, textAlign: TextAlign.center),
           const SizedBox(height: 8),
-          Text(
-            '${(TrackingMock.progress * 100).round()}% complete',
-            style: AppTypography.bodyXs,
-          ),
+          Text('Trip status: $tripStatus', style: AppTypography.bodyMd, textAlign: TextAlign.center),
+          if (shipment?.trip == null && shipment?.status == 'searching_driver') ...[
+            const SizedBox(height: 8),
+            const Text('Driver cancelled or no driver assigned yet.', style: TextStyle(color: AppColors.accent)),
+          ],
+          if (shipment?.status == 'delivered') ...[
+            const SizedBox(height: 8),
+            const Text('Delivery completed.', style: TextStyle(color: AppColors.darkGreen)),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildDriverCard() {
+  Widget _buildTrackingCard(ShipmentTracking? tracking) {
+    if (tracking == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: AppColors.light, borderRadius: BorderRadius.circular(12)),
+        child: Text('Tracking data is not available yet.', style: AppTypography.bodySm),
+      );
+    }
+    final signal = tracking.signal ?? 'unknown';
+    final lost = signal == 'lost';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.light,
         borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: AppColors.white,
-            child: Icon(Icons.person, color: AppColors.darkGreen, size: 24),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(TrackingMock.driverName, style: AppTypography.bodyMd),
-                Text(TrackingMock.vehicle, style: AppTypography.bodyXs),
-              ],
-            ),
-          ),
-          Icon(Icons.chat_outlined, color: AppColors.darkGreen, size: 22),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRouteCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.light,
-        borderRadius: BorderRadius.circular(12),
+        border: lost ? Border.all(color: AppColors.accent) : null,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildRouteRow(Icons.local_shipping_outlined, 'Pickup', TrackingMock.pickup),
-          const SizedBox(height: 12),
-          _buildRouteRow(Icons.location_on_outlined, 'Drop-off', TrackingMock.dropoff),
+          Text('Signal: $signal', style: AppTypography.bodyMd),
+          if (lost) const Text('No recent driver signal.', style: TextStyle(color: AppColors.accent)),
+          const SizedBox(height: 8),
+          Text('Next stop: ${tracking.nextStop ?? '—'}', style: AppTypography.bodySm),
+          Text('Distance to next stop: ${tracking.distanceToNextStopM?.toString() ?? '—'} m', style: AppTypography.bodySm),
+          if (tracking.driverLocation != null)
+            Text(
+              'Location accuracy: ${tracking.driverAccuracyM?.toStringAsFixed(1) ?? '—'} m',
+              style: AppTypography.bodySm,
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildRouteRow(IconData icon, String label, String address) {
-    return Row(
-      children: [
-        Icon(icon, color: AppColors.darkGreen, size: 20),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: AppTypography.labelSm),
-              Text(address, style: AppTypography.bodySm),
-            ],
-          ),
-        ),
-      ],
+  Widget _buildDriverCard(Shipment? shipment) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppColors.light, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_driverName(), style: AppTypography.bodyMd),
+          Text(_vehicle(), style: AppTypography.bodyXs),
+          if (shipment?.trip?.driverPhone != null)
+            Text(shipment!.trip!.driverPhone!, style: AppTypography.bodyXs),
+        ],
+      ),
     );
   }
 
-  Widget _buildActions() {
+  Widget _buildRouteCard(Shipment? shipment) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: AppColors.light, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _row('Pickup', shipment?.pickup?.address ?? '—'),
+          _row('Drop-off', shipment?.dropoff?.address ?? '—'),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(width: 84, child: Text(label, style: AppTypography.bodyXs)),
+            Expanded(child: Text(value, style: AppTypography.bodySm)),
+          ],
+        ),
+      );
+
+  Widget _buildActions(Shipment? shipment) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
@@ -208,62 +276,18 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
             variant: WaslaButtonVariant.primary,
             onPressed: () => Navigator.of(context).push(
               TAMaterialRoute<void>(
-                builder: (_) => const TrackingShipmentStagesPage(),
+                builder: (_) => TrackingShipmentStagesPage(shipmentId: widget.shipmentId),
               ),
             ),
           ),
           const SizedBox(height: 8),
           WaslaButton(
-            text: 'Chat with driver',
+            text: 'Refresh',
             variant: WaslaButtonVariant.secondary,
-            onPressed: () => Navigator.of(context).push(
-              TAMaterialRoute<void>(
-                builder: (_) => const ChatPage(),
-              ),
-            ),
+            onPressed: () => _load(),
           ),
         ],
       ),
     );
   }
-}
-
-class _MapPainter extends CustomPainter {
-  const _MapPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final background = Paint()..color = AppColors.light;
-    canvas.drawRect(Offset.zero & size, background);
-
-    final roadPaint = Paint()
-      ..color = AppColors.white
-      ..strokeWidth = 20
-      ..style = PaintingStyle.stroke;
-    final road = Path()
-      ..moveTo(size.width * .1, -10)
-      ..cubicTo(
-        size.width * .4,
-        size.height * .3,
-        size.width * .1,
-        size.height * .6,
-        size.width * .05,
-        size.height + 10,
-      );
-    canvas.drawPath(road, roadPaint);
-
-    final routePaint = Paint()
-      ..color = AppColors.accent
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final route = Path()
-      ..moveTo(size.width * .3, size.height * .5)
-      ..lineTo(size.width * .5, size.height * .55)
-      ..lineTo(size.width * .8, size.height * .7);
-    canvas.drawPath(route, routePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
