@@ -46,7 +46,7 @@ class _DeliverySuccessScreenState extends State<DeliverySuccessScreen>
       MaterialPageRoute<void>(
         builder: (_) => const RequestsListScreen(),
       ),
-      (_) => false,
+      (route) => route.isFirst,
     );
   }
 

@@ -24,6 +24,12 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>يستخدم Wasla Driver موقعك لإرسال الطلبات وتحديث حالة الرحلة.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>يستخدم Wasla Driver الكاميرا لتوثيق المستندات والحمولة والتسليم.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>اختر صور مستنداتك من مكتبة الصور لرفعها إلى Wasla.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

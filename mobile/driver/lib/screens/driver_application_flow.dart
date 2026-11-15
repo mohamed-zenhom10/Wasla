@@ -1429,7 +1429,7 @@ class _DriverApplicationFlowState extends State<DriverApplicationFlow> {
   }
 
   bool _isSessionEnded(Object error) =>
-      error is DriverApiException && error.code == 'SESSION_ENDED';
+      error is DriverApiException && error.requiresLogin;
 
   void _goToLogin() {
     if (!mounted) return;

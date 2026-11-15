@@ -1,53 +1,84 @@
+import 'dart:async';
+
 import 'package:driver/components/driver_components.dart';
+import 'package:driver/components/driver_session.dart';
+import 'package:driver/data/driver_api.dart';
 import 'package:driver/screens/driver_home_screen.dart';
 import 'package:driver/screens/incoming_request_screen.dart';
 import 'package:driver/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class RequestsListScreen extends StatefulWidget {
-  const RequestsListScreen({super.key});
+  const RequestsListScreen({super.key, this.api});
+
+  final DriverApi? api;
 
   @override
   State<RequestsListScreen> createState() => _RequestsListScreenState();
 }
 
 class _RequestsListScreenState extends State<RequestsListScreen> {
-  bool _showBackhaul = false;
+  late final DriverApi _api = widget.api ?? DriverApi();
+  Timer? _pollTimer;
+  List<Map<String, dynamic>> _offers = const [];
+  bool _online = false;
+  bool _loading = true;
+  bool _polling = false;
+  String? _error;
 
-  static const _requests = [
-    _ShipmentRequest(
-      route: 'Nasr City → Maadi',
-      earnings: 'EGP 432 net',
-      distance: '18 km',
-      cargo: 'Furniture',
-      duration: '55 min',
-      pickup: 'Pickup 14:00',
-      isBackhaul: true,
-    ),
-    _ShipmentRequest(
-      route: 'Heliopolis → New Cairo',
-      earnings: 'EGP 560 net',
-      distance: '24 km',
-      cargo: 'Appliances',
-      duration: '70 min',
-      pickup: 'Pickup now',
-    ),
-    _ShipmentRequest(
-      route: 'Nasr City → Downtown',
-      earnings: 'EGP 360 net',
-      distance: '12 km',
-      cargo: 'Shop stock',
-      duration: '45 min',
-      pickup: 'Pickup now',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadOffers();
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted) {
+        timer.cancel();
+      } else if (_online) {
+        _loadOffers(showSpinner: false);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    if (widget.api == null) _api.close();
+    super.dispose();
+  }
+
+  Future<void> _loadOffers({bool showSpinner = true}) async {
+    if (_polling) return;
+    _polling = true;
+    if (showSpinner && mounted) setState(() => _loading = true);
+    try {
+      final status = await _api.getDriverStatus();
+      final online = status['online'] == true;
+      final offers = online ? await _api.getOffers() : <Map<String, dynamic>>[];
+      if (!mounted) return;
+      setState(() {
+        _online = online;
+        _offers = offers;
+        _error = null;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      if (handleDriverSessionError(context, error)) return;
+      setState(() {
+        _loading = false;
+        _error = _message(error);
+      });
+    } finally {
+      _polling = false;
+    }
+  }
+
+  String _message(Object error) => error is DriverApiException
+      ? error.message
+      : 'تعذر تحميل الطلبات. تحقق من اتصالك وحاول مجددًا.';
 
   @override
   Widget build(BuildContext context) {
-    final visibleRequests = _showBackhaul
-        ? _requests.where((request) => request.isBackhaul).toList()
-        : _requests;
-
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -72,8 +103,10 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
                               ),
                             ),
                             const Spacer(),
-                            const Text(
-                              'ONLINE · 3 AVAILABLE',
+                            Text(
+                              _online
+                                  ? 'ONLINE · ${_offers.length} AVAILABLE'
+                                  : 'OFFLINE',
                               style: TextStyle(
                                 color: AppColors.ink,
                                 fontSize: 10,
@@ -91,35 +124,48 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
                           ),
                         ),
                         const SizedBox(height: 18),
-                        _RequestFilter(
-                          showBackhaul: _showBackhaul,
-                          onChanged: (value) =>
-                              setState(() => _showBackhaul = value),
-                        ),
-                        const SizedBox(height: 16),
-                        for (
-                          var index = 0;
-                          index < visibleRequests.length;
-                          index++
-                        ) ...[
-                          _RequestCard(
-                            request: visibleRequests[index],
-                            isHighlighted: !_showBackhaul && index == 0,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const IncomingRequestScreen(),
-                              ),
+                        if (_error != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: Colors.red),
                             ),
                           ),
-                          const SizedBox(height: 16),
-                        ],
+                        if (_loading)
+                          const Center(child: CircularProgressIndicator())
+                        else if (!_online)
+                          const _EmptyRequests(
+                            message: 'Go online from Home to receive requests.',
+                          )
+                        else if (_offers.isEmpty)
+                          const _EmptyRequests(
+                            message: 'We’ll show new nearby requests here.',
+                          )
+                        else
+                          for (var index = 0; index < _offers.length; index++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: _RequestCard(
+                                request: _offers[index],
+                                isHighlighted: index == 0,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => IncomingRequestScreen(
+                                      offer: _offers[index],
+                                      api: widget.api,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                       ]),
                     ),
                   ),
-                  const SliverToBoxAdapter(
+                  SliverToBoxAdapter(
                     child: Padding(
                       padding: EdgeInsets.fromLTRB(24, 0, 24, 16),
-                      child: DriverMapPreview(height: 180),
+                      child: DriverMapPreview(height: 180, isOnline: _online),
                     ),
                   ),
                 ],
@@ -148,75 +194,22 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
   }
 }
 
-class _RequestFilter extends StatelessWidget {
-  const _RequestFilter({required this.showBackhaul, required this.onChanged});
+class _EmptyRequests extends StatelessWidget {
+  const _EmptyRequests({required this.message});
 
-  final bool showBackhaul;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Row(
-        children: [
-          _FilterOption(
-            label: 'Nearby',
-            selected: !showBackhaul,
-            onTap: () => onChanged(false),
-          ),
-          _FilterOption(
-            label: 'Smart Backhaul',
-            selected: showBackhaul,
-            onTap: () => onChanged(true),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FilterOption extends StatelessWidget {
-  const _FilterOption({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final String message;
 
   @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Material(
-        color: selected ? AppColors.ink : Colors.transparent,
-        borderRadius: BorderRadius.circular(7),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(7),
-          child: SizedBox(
-            height: 44,
-            child: Center(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: selected ? AppColors.white : AppColors.ink,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
-        ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 36),
+    child: Center(
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: AppColors.muted),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _RequestCard extends StatelessWidget {
@@ -226,7 +219,7 @@ class _RequestCard extends StatelessWidget {
     required this.onTap,
   });
 
-  final _ShipmentRequest request;
+  final Map<String, dynamic> request;
   final bool isHighlighted;
   final VoidCallback onTap;
 
@@ -237,7 +230,7 @@ class _RequestCard extends StatelessWidget {
         : null;
 
     return Material(
-      key: ValueKey('request-${request.route}'),
+      key: ValueKey('request-${request['id']}'),
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
@@ -264,7 +257,9 @@ class _RequestCard extends StatelessWidget {
                   if (isHighlighted) const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '${request.route}  ·  ${request.earnings}',
+                      '${request['pickup']?['address'] ?? 'Pickup'} → '
+                      '${request['dropoff']?['address'] ?? 'Drop-off'}  ·  '
+                      'EGP ${request['driverEarning'] ?? '0.00'} net',
                       style: const TextStyle(
                         color: AppColors.ink,
                         fontSize: 13,
@@ -275,25 +270,11 @@ class _RequestCard extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                '${request.distance} · ${request.cargo} · '
-                '${request.duration} · ${request.pickup}',
+                '${request['distanceToPickupM'] ?? 0} m to pickup · '
+                '${request['itemCount'] ?? 0} items · '
+                '${request['secondsLeft'] ?? 0}s to accept',
                 style: const TextStyle(color: AppColors.ink, fontSize: 12),
               ),
-              if (request.isBackhaul) ...[
-                const SizedBox(height: 17),
-                const Row(
-                  children: [
-                    Icon(Icons.swap_horiz, color: AppColors.accent, size: 16),
-                    SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Smart Backhaul · Returning your way',
-                        style: TextStyle(color: AppColors.accent, fontSize: 11),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
               const SizedBox(height: 18),
               TextButton(
                 onPressed: onTap,
@@ -319,24 +300,4 @@ class _RequestCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ShipmentRequest {
-  const _ShipmentRequest({
-    required this.route,
-    required this.earnings,
-    required this.distance,
-    required this.cargo,
-    required this.duration,
-    required this.pickup,
-    this.isBackhaul = false,
-  });
-
-  final String route;
-  final String earnings;
-  final String distance;
-  final String cargo;
-  final String duration;
-  final String pickup;
-  final bool isBackhaul;
 }

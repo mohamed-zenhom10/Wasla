@@ -196,6 +196,142 @@ void main() {
     },
   );
 
+  test(
+    'driver availability, offers, and trip actions follow the API contract',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'driver.accessToken': 'access-1',
+      });
+      final api = DriverApi(
+        client: MockClient((request) async {
+          expect(request.headers['Authorization'], startsWith('Bearer '));
+          switch ('${request.method} ${request.url.path}') {
+            case 'GET /api/driver/status':
+              return http.Response(
+                jsonEncode({
+                  'status': {'online': false, 'canGoOnline': true},
+                }),
+                200,
+              );
+            case 'POST /api/driver/online':
+              expect(jsonDecode(request.body), {'lat': 30.05, 'lng': 31.33});
+              return http.Response(
+                jsonEncode({
+                  'status': {'online': true, 'canGoOnline': true},
+                }),
+                200,
+              );
+            case 'POST /api/driver/offline':
+              return http.Response(
+                jsonEncode({
+                  'status': {'online': false, 'canGoOnline': true},
+                }),
+                200,
+              );
+            case 'POST /api/driver/location':
+              expect(jsonDecode(request.body), {
+                'lat': 30.05,
+                'lng': 31.33,
+                'accuracyM': 12.5,
+              });
+              return http.Response(
+                jsonEncode({
+                  'status': {'online': true, 'canGoOnline': true},
+                }),
+                200,
+              );
+            case 'GET /api/driver/offers':
+              return http.Response(
+                jsonEncode({
+                  'offers': [
+                    {'id': 'offer-41', 'secondsLeft': 24},
+                  ],
+                }),
+                200,
+              );
+            case 'POST /api/driver/offers/offer-41/accept':
+              return http.Response(
+                jsonEncode({
+                  'trip': {'id': '7', 'status': 'assigned'},
+                }),
+                201,
+              );
+            case 'POST /api/driver/trips/7/start':
+              expect(jsonDecode(request.body), {'lat': 30.05, 'lng': 31.33});
+              return http.Response(
+                jsonEncode({
+                  'trip': {'id': '7', 'status': 'heading_to_pickup'},
+                }),
+                200,
+              );
+            case 'PUT /api/driver/trips/7/photos/pickup':
+              expect(request.headers['Content-Type'], 'image/jpeg');
+              expect(request.bodyBytes, [1, 2, 3]);
+              return http.Response(
+                jsonEncode({
+                  'trip': {'id': '7', 'status': 'arrived_at_pickup'},
+                }),
+                201,
+              );
+            case 'GET /api/driver/trips/current':
+              return http.Response(
+                jsonEncode({
+                  'trip': {'id': '7', 'status': 'assigned'},
+                }),
+                200,
+              );
+            case 'POST /api/driver/trips/7/cancel':
+              expect(jsonDecode(request.body), {'reason': 'Flat tyre'});
+              return http.Response(
+                jsonEncode({
+                  'trip': {'id': '7', 'status': 'cancelled'},
+                }),
+                200,
+              );
+            default:
+              fail('Unexpected API request: ${request.method} ${request.url}');
+          }
+        }),
+      );
+
+      expect((await api.getDriverStatus())['online'], isFalse);
+      expect(
+        (await api.setOnline({
+          'lat': 30.05,
+          'lng': 31.33,
+          'accuracyM': 12.5,
+        }))['online'],
+        isTrue,
+      );
+      expect((await api.setOffline())['online'], isFalse);
+      expect(
+        (await api.sendLocation({
+          'lat': 30.05,
+          'lng': 31.33,
+          'accuracyM': 12.5,
+        }))['online'],
+        isTrue,
+      );
+      expect((await api.getOffers()).single['id'], 'offer-41');
+      expect((await api.acceptOffer('offer-41'))['status'], 'assigned');
+      expect(
+        (await api.updateTrip(
+          '7',
+          'start',
+          body: {'lat': 30.05, 'lng': 31.33},
+        ))['status'],
+        'heading_to_pickup',
+      );
+      expect(
+        (await api.uploadTripPhoto('7', 'pickup', [1, 2, 3]))['status'],
+        'arrived_at_pickup',
+      );
+      expect((await api.getCurrentTrip())?['id'], '7');
+      expect((await api.cancelTrip('7', 'Flat tyre'))['status'], 'cancelled');
+      api.close();
+    },
+  );
+
   test('ended refresh session clears both stored tokens', () async {
     SharedPreferences.setMockInitialValues({
       'driver.accessToken': 'expired-access',

@@ -1,32 +1,54 @@
-# driver
+# Wasla Driver app
 
-A new Flutter project.
+The driver app uses the API contract in [`backend/API.md`](../../backend/API.md).
+Authentication, driver applications, live availability, offers, and trip
+updates are sent to the backend. Offer polling is every 5 seconds; driver
+location is sent every 30 seconds online and every 10 seconds during a trip.
 
-## Getting Started
+## Run the app
 
-This project is a starting point for a Flutter application.
+From `mobile/driver`:
 
-A few resources to get you started if this is your first Flutter project:
+```powershell
+flutter pub get
+flutter run
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+By default the app uses the hosted API:
+`https://wasla-api-464a.onrender.com/api`. Its free host can take a while to
+wake up; requests use a 90-second timeout.
 
-## Request screens
+To use a local backend, set the API URL when running:
 
-The requests list and incoming-request screens currently use local preview
-data. The supplied API currently has no shipment-request listing or
-accept/decline endpoints, so those actions are intentionally not sent to the
-backend. When request endpoints are available, use
-`https://wasla-api-464a.onrender.com/api` and a request timeout of at least
-60 seconds for the free server's cold start.
+```powershell
+# Android emulator
+flutter run --dart-define=WASLA_API_URL=http://10.0.2.2:3000/api
 
-The driver trip preview continues from an accepted request through pickup,
-cargo loading, and delivery confirmation. Completing a delivery shows a short
-success animation and returns to the requests list. Trip status, proof of
-delivery, and payment confirmation are local preview state; they are not sent
-to the backend.
+# iOS simulator
+flutter run --dart-define=WASLA_API_URL=http://localhost:3000/api
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# Physical phone: replace the address with your development computer's LAN IP
+flutter run --dart-define=WASLA_API_URL=http://192.168.1.10:3000/api
+```
+
+Start and configure the backend first by following [`backend/README.md`](../../backend/README.md).
+The phone/emulator and backend must be able to reach each other. Do not use
+`localhost` for an Android emulator or a physical phone.
+
+## Driver account and location
+
+Sign in with an account whose API role includes `driver`, or register a driver
+account and verify its email. The onboarding flow needs the catalog and policies
+configured on the backend. A driver must be approved and have an active vehicle
+before going online.
+
+Allow location access when prompted. Location is required to go online and start
+a trip. Keep location services enabled while working. Trip pickup and delivery
+photos are uploaded directly to the API and must each be no larger than 5 MB.
+
+## Validate
+
+```powershell
+flutter analyze
+flutter test
+```

@@ -76,13 +76,28 @@ class DriverWelcomeScreen extends StatelessWidget {
               top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-                child: PrimaryButton(
-                  label: 'Become a driver',
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const DriverAuthScreen(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PrimaryButton(
+                      label: 'Become a driver',
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const DriverAuthScreen(),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              const DriverAuthScreen(startInLogin: true),
+                        ),
+                      ),
+                      child: const Text('Already have an account? Log in'),
+                    ),
+                  ],
                 ),
               ),
             ),

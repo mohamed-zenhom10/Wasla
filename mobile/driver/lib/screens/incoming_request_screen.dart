@@ -1,22 +1,30 @@
 import 'dart:async';
 
 import 'package:driver/components/driver_components.dart';
+import 'package:driver/components/driver_session.dart';
+import 'package:driver/data/driver_api.dart';
 import 'package:driver/screens/arriving_screen.dart';
 import 'package:driver/screens/driver_home_screen.dart';
 import 'package:driver/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class IncomingRequestScreen extends StatefulWidget {
-  const IncomingRequestScreen({super.key});
+  const IncomingRequestScreen({super.key, required this.offer, this.api});
+
+  final Map<String, dynamic> offer;
+  final DriverApi? api;
 
   @override
   State<IncomingRequestScreen> createState() => _IncomingRequestScreenState();
 }
 
 class _IncomingRequestScreenState extends State<IncomingRequestScreen> {
-  static const _requestWindow = 30;
+  late final DriverApi _api = widget.api ?? DriverApi();
   Timer? _timer;
-  int _secondsRemaining = _requestWindow;
+  late int _secondsRemaining =
+      (widget.offer['secondsLeft'] as num?)?.toInt() ?? 0;
+  bool _busy = false;
+  String? _error;
 
   @override
   void initState() {
@@ -24,9 +32,9 @@ class _IncomingRequestScreenState extends State<IncomingRequestScreen> {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_secondsRemaining <= 1) {
         _timer?.cancel();
-        setState(() => _secondsRemaining = 0);
+        if (mounted) setState(() => _secondsRemaining = 0);
       } else {
-        setState(() => _secondsRemaining--);
+        if (mounted) setState(() => _secondsRemaining--);
       }
     });
   }
@@ -34,6 +42,7 @@ class _IncomingRequestScreenState extends State<IncomingRequestScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    if (widget.api == null) _api.close();
     super.dispose();
   }
 
@@ -69,11 +78,15 @@ class _IncomingRequestScreenState extends State<IncomingRequestScreen> {
                     const SizedBox(height: 18),
                     const DriverMapPreview(height: 192),
                     const SizedBox(height: 16),
-                    const _EarningsPanel(),
+                    _EarningsPanel(offer: widget.offer),
                     const SizedBox(height: 16),
-                    const _AddressPanel(),
+                    _AddressPanel(offer: widget.offer),
                     const SizedBox(height: 16),
-                    const _CargoPanel(),
+                    _CargoPanel(offer: widget.offer),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                    ],
                   ],
                 ),
               ),
@@ -86,7 +99,7 @@ class _IncomingRequestScreenState extends State<IncomingRequestScreen> {
                     width: double.infinity,
                     height: 56,
                     child: OutlinedButton(
-                      onPressed: () => _showPreviewNotice(context, 'decline'),
+                      onPressed: _busy || expired ? null : _decline,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.ink,
                         side: const BorderSide(color: AppColors.ink),
@@ -106,9 +119,7 @@ class _IncomingRequestScreenState extends State<IncomingRequestScreen> {
                   const SizedBox(height: 8),
                   PrimaryButton(
                     label: expired ? 'Request expired' : 'Accept request',
-                    onPressed: expired
-                        ? null
-                        : () => _showPreviewNotice(context, 'accept'),
+                    onPressed: expired || _busy ? null : _accept,
                   ),
                 ],
               ),
@@ -119,27 +130,52 @@ class _IncomingRequestScreenState extends State<IncomingRequestScreen> {
     );
   }
 
-  void _showPreviewNotice(BuildContext context, String action) {
-    if (action == 'accept') {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const ArrivingScreen()),
-      );
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Request $action is a local preview; the backend has no request '
-          'endpoint yet.',
+  Future<void> _accept() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final trip = await _api.acceptOffer(widget.offer['id'].toString());
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => ArrivingScreen(trip: trip, api: widget.api),
         ),
-      ),
-    );
+      );
+    } catch (error) {
+      if (!mounted || handleDriverSessionError(context, error)) return;
+      setState(() => _error = _message(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
+
+  Future<void> _decline() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await _api.declineOffer(widget.offer['id'].toString());
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted || handleDriverSessionError(context, error)) return;
+      setState(() => _error = _message(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  String _message(Object error) => error is DriverApiException
+      ? error.message
+      : 'تعذر تنفيذ الطلب. تحقق من اتصالك وحاول مجددًا.';
 }
 
 class _EarningsPanel extends StatelessWidget {
-  const _EarningsPanel();
+  const _EarningsPanel({required this.offer});
+
+  final Map<String, dynamic> offer;
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +186,7 @@ class _EarningsPanel extends StatelessWidget {
         color: AppColors.ink,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
@@ -159,7 +195,7 @@ class _EarningsPanel extends StatelessWidget {
           ),
           SizedBox(height: 12),
           Text(
-            'EGP 432',
+            'EGP ${offer['driverEarning'] ?? '0.00'}',
             style: TextStyle(
               color: AppColors.white,
               fontSize: 30,
@@ -168,9 +204,17 @@ class _EarningsPanel extends StatelessWidget {
           ),
           SizedBox(height: 12),
           Text(
-            'EGP 540 gross − EGP 108 commission',
+            '${offer['fareAmount'] ?? '0.00'} gross − '
+            '${offer['commissionAmount'] ?? '0.00'} commission',
             style: TextStyle(color: AppColors.white, fontSize: 12),
           ),
+          if (offer['cashToCollect'] != null) ...[
+            SizedBox(height: 8),
+            Text(
+              'Cash to collect · EGP ${offer['cashToCollect']}',
+              style: TextStyle(color: AppColors.white, fontSize: 12),
+            ),
+          ],
         ],
       ),
     );
@@ -178,7 +222,9 @@ class _EarningsPanel extends StatelessWidget {
 }
 
 class _AddressPanel extends StatelessWidget {
-  const _AddressPanel();
+  const _AddressPanel({required this.offer});
+
+  final Map<String, dynamic> offer;
 
   @override
   Widget build(BuildContext context) {
@@ -189,17 +235,20 @@ class _AddressPanel extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Column(
+      child: Column(
         children: [
           _AddressLine(
             icon: Icons.radio_button_checked,
-            label: '12 Abbas El Akkad, Nasr City',
+            label:
+                (offer['pickup'] as Map?)?['address']?.toString() ?? 'Pickup',
             type: 'Pickup',
           ),
           SizedBox(height: 18),
           _AddressLine(
             icon: Icons.location_on_outlined,
-            label: '18 Road 9, Maadi',
+            label:
+                (offer['dropoff'] as Map?)?['address']?.toString() ??
+                'Drop-off',
             type: 'Drop-off',
           ),
         ],
@@ -245,7 +294,9 @@ class _AddressLine extends StatelessWidget {
 }
 
 class _CargoPanel extends StatelessWidget {
-  const _CargoPanel();
+  const _CargoPanel({required this.offer});
+
+  final Map<String, dynamic> offer;
 
   @override
   Widget build(BuildContext context) {
@@ -256,9 +307,31 @@ class _CargoPanel extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Text(
-        'Cargo  ·  Furniture · 12 items',
-        style: TextStyle(color: AppColors.ink, fontSize: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cargo  ·  ${offer['cargoDescription'] ?? 'Shipment'}',
+            style: const TextStyle(
+              color: AppColors.ink,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${offer['itemCount'] ?? 0} items · ${offer['weightKg'] ?? 0} kg · '
+            '${offer['helpersCount'] ?? 0} helpers',
+            style: const TextStyle(color: AppColors.ink, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            offer['pickupType'] == 'now'
+                ? 'Pickup now'
+                : 'Scheduled · ${offer['pickupWindowStart'] ?? 'time pending'}',
+            style: const TextStyle(color: AppColors.ink, fontSize: 12),
+          ),
+        ],
       ),
     );
   }

@@ -147,7 +147,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
       : 'تعذر الاتصال بالخادم. حاول مرة أخرى.';
 
   bool _isSessionEnded(Object error) =>
-      error is DriverApiException && error.code == 'SESSION_ENDED';
+      error is DriverApiException && error.requiresLogin;
 
   void _goToLogin() {
     if (!mounted) return;

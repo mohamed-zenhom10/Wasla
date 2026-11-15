@@ -1,28 +1,187 @@
+import 'dart:async';
+
 import 'package:driver/components/driver_components.dart';
-import 'package:driver/screens/incoming_request_screen.dart';
+import 'package:driver/components/driver_session.dart';
+import 'package:driver/data/driver_api.dart';
+import 'package:driver/data/driver_location.dart';
+import 'package:driver/screens/arriving_screen.dart';
+import 'package:driver/screens/cargo_loaded_screen.dart';
+import 'package:driver/screens/proof_of_delivery_screen.dart';
 import 'package:driver/screens/requests_list_screen.dart';
 import 'package:driver/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class DriverHomeScreen extends StatefulWidget {
-  const DriverHomeScreen({super.key});
+  const DriverHomeScreen({super.key, this.api});
+
+  final DriverApi? api;
 
   @override
   State<DriverHomeScreen> createState() => _DriverHomeScreenState();
 }
 
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
-  bool _isOnline = false;
+  late final DriverApi _api = widget.api ?? DriverApi();
+  Timer? _locationTimer;
+  Map<String, dynamic> _status = const {};
+  String _driverName = 'Driver';
+  bool _loading = true;
+  bool _busy = false;
+  bool _tripOpened = false;
+  String? _error;
 
-  void _setOnline(bool value) {
-    setState(() => _isOnline = value);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Availability is a local preview. No trips or requests are connected.',
-        ),
-      ),
+  bool get _isOnline => _status['online'] == true;
+  List<String> get _blockers => (_status['blockers'] as List? ?? const [])
+      .map((item) => item.toString())
+      .toList();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _locationTimer?.cancel();
+    if (widget.api == null) _api.close();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final values = await Future.wait([
+        _api.getDriverStatus(),
+        _api.getMe(),
+        _api.getCurrentTrip(),
+      ]);
+      final status = values[0] as Map<String, dynamic>;
+      final user =
+          ((values[1] as Map<String, dynamic>)['user'] as Map?)
+              ?.cast<String, dynamic>() ??
+          const {};
+      final trip = values[2];
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+        _driverName = user['fullName']?.toString().split(' ').first ?? 'Driver';
+        _loading = false;
+        _error = null;
+      });
+      final tripRunning =
+          trip != null &&
+          const [
+            'heading_to_pickup',
+            'arrived_at_pickup',
+            'loaded',
+            'heading_to_dropoff',
+            'arrived_at_dropoff',
+          ].contains(trip['status']);
+      _configureLocationUpdates(tripRunning);
+      if (trip != null) _openTrip(trip);
+    } catch (error) {
+      if (!mounted) return;
+      if (handleDriverSessionError(context, error)) return;
+      setState(() {
+        _loading = false;
+        _error = _message(error);
+      });
+    }
+  }
+
+  Future<void> _setOnline(bool value) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final status = value
+          ? await _api.setOnline(await DriverLocation.current())
+          : await _api.setOffline();
+      if (!mounted) return;
+      setState(() => _status = status);
+      _configureLocationUpdates(false);
+    } catch (error) {
+      if (!mounted || handleDriverSessionError(context, error)) return;
+      setState(() => _error = _message(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _configureLocationUpdates(bool tripRunning) {
+    _locationTimer?.cancel();
+    if (tripRunning || !_isOnline) return;
+    _locationTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _sendLocation(),
     );
+  }
+
+  Future<void> _sendLocation() async {
+    try {
+      final status = await _api.sendLocation(await DriverLocation.current());
+      if (mounted) setState(() => _status = status);
+    } on DriverApiException catch (error) {
+      if (!mounted) return;
+      if (handleDriverSessionError(context, error)) return;
+      if (error.code == 'NOT_ONLINE') {
+        _locationTimer?.cancel();
+        if (mounted) setState(() => _status = {..._status, 'online': false});
+      } else if (mounted) {
+        setState(() => _error = _message(error));
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = _message(error));
+    }
+  }
+
+  void _openTrip(Map<String, dynamic> trip) {
+    if (_tripOpened || !mounted) return;
+    _tripOpened = true;
+    final status = trip['status'] as String?;
+    final screen = switch (status) {
+      'assigned' ||
+      'heading_to_pickup' => ArrivingScreen(trip: trip, api: widget.api),
+      'arrived_at_pickup' ||
+      'loaded' => CargoLoadedScreen(trip: trip, api: widget.api),
+      'heading_to_dropoff' || 'arrived_at_dropoff' => ProofOfDeliveryScreen(
+        trip: trip,
+        api: widget.api,
+      ),
+      _ => null,
+    };
+    if (screen == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context)
+            .push(MaterialPageRoute<void>(builder: (_) => screen))
+            .then((_) => _load());
+      }
+    });
+  }
+
+  String _message(Object error) => error is DriverApiException
+      ? error.message
+      : error is StateError
+      ? error.message
+      : 'تعذر الاتصال بالخادم. تحقق من الإنترنت وحاول مجددًا.';
+
+  String _blockerText() {
+    if (_blockers.isEmpty) return '';
+    return switch (_blockers.first) {
+      'not_approved' => 'Application is still under review.',
+      'no_active_vehicle' || 'vehicle_not_active' =>
+        'An active vehicle is required before going online.',
+      'policies_not_accepted' => 'Accept the latest policies to continue.',
+      'license_expired' ||
+      'vehicle_license_expired' => 'A vehicle or driver license has expired.',
+      'license_too_low' => 'Your license category does not match this vehicle.',
+      'debt_over_limit' =>
+        'Your outstanding balance exceeds the allowed limit.',
+      _ => 'You cannot go online yet.',
+    };
   }
 
   @override
@@ -39,9 +198,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   children: [
                     const _HomeHeader(),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Morning, Ahmed',
-                      style: TextStyle(
+                    Text(
+                      'Morning, $_driverName',
+                      style: const TextStyle(
                         color: AppColors.ink,
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
@@ -51,19 +210,36 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     _AvailabilityCard(
                       isOnline: _isOnline,
                       onChanged: _setOnline,
+                      enabled:
+                          !_busy &&
+                          (_isOnline || _status['canGoOnline'] == true),
                     ),
+                    if (_loading) ...[
+                      const SizedBox(height: 12),
+                      const LinearProgressIndicator(),
+                    ],
+                    if (_error != null || _blockers.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _error ?? _blockerText(),
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ],
                     const SizedBox(height: 16),
-                    _DriverStats(isOnline: _isOnline),
+                    _DriverStats(status: _status),
                     const SizedBox(height: 16),
-                    const DriverMapPreview(),
+                    DriverMapPreview(isOnline: _isOnline),
                     if (_isOnline) ...[
                       const SizedBox(height: 16),
                       _RequestCard(
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const IncomingRequestScreen(),
-                          ),
-                        ),
+                        onTap: () => Navigator.of(context)
+                            .push(
+                              MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    RequestsListScreen(api: widget.api),
+                              ),
+                            )
+                            .then((_) => _load()),
                       ),
                     ],
                     if (!_isOnline) ...[
@@ -71,7 +247,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       PrimaryButton(
                         label: 'Go online',
                         icon: Icons.power_settings_new,
-                        onPressed: () => _setOnline(true),
+                        onPressed:
+                            _busy || _loading || _status['canGoOnline'] != true
+                            ? null
+                            : () => _setOnline(true),
                       ),
                     ],
                   ],
@@ -83,11 +262,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               onDestinationSelected: (index) {
                 if (index == 0) return;
                 if (index == 1) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const RequestsListScreen(),
-                    ),
-                  );
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => RequestsListScreen(api: widget.api),
+                        ),
+                      )
+                      .then((_) => _load());
                   return;
                 }
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -124,7 +305,7 @@ class _HomeHeader extends StatelessWidget {
           ),
         ),
         Text(
-          'CAIRO OPERATIONS',
+          'DRIVER OPERATIONS',
           style: TextStyle(color: AppColors.ink, fontSize: 10),
         ),
       ],
@@ -133,10 +314,15 @@ class _HomeHeader extends StatelessWidget {
 }
 
 class _AvailabilityCard extends StatelessWidget {
-  const _AvailabilityCard({required this.isOnline, required this.onChanged});
+  const _AvailabilityCard({
+    required this.isOnline,
+    required this.onChanged,
+    required this.enabled,
+  });
 
   final bool isOnline;
   final ValueChanged<bool> onChanged;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +350,7 @@ class _AvailabilityCard extends StatelessWidget {
               ),
               Switch(
                 value: isOnline,
-                onChanged: onChanged,
+                onChanged: enabled ? onChanged : null,
                 activeThumbColor: AppColors.accent,
                 activeTrackColor: AppColors.ink,
                 inactiveThumbColor: AppColors.white,
@@ -178,7 +364,7 @@ class _AvailabilityCard extends StatelessWidget {
           const SizedBox(height: 3),
           Text(
             isOnline
-                ? 'Ready for requests near Nasr City.'
+                ? 'Ready for requests in your area.'
                 : 'Go online when you are ready to accept trips.',
             style: const TextStyle(
               color: AppColors.white,
@@ -193,16 +379,16 @@ class _AvailabilityCard extends StatelessWidget {
 }
 
 class _DriverStats extends StatelessWidget {
-  const _DriverStats({required this.isOnline});
+  const _DriverStats({required this.status});
 
-  final bool isOnline;
+  final Map<String, dynamic> status;
 
   @override
   Widget build(BuildContext context) {
     final stats = [
-      ('EGP 1,240', 'Today’s net'),
-      ('4', 'Trips'),
-      (isOnline ? '3' : '0', 'Requests'),
+      ('EGP ${status['balance'] ?? '0.00'}', 'Wallet balance'),
+      (status['vehicle']?['plateNumber']?.toString() ?? '—', 'Active vehicle'),
+      (status['canGoOnline'] == true ? 'Ready' : 'Review', 'Work status'),
     ];
     return Row(
       children: [
@@ -244,9 +430,10 @@ class _DriverStats extends StatelessWidget {
 }
 
 class DriverMapPreview extends StatelessWidget {
-  const DriverMapPreview({super.key, this.height = 272});
+  const DriverMapPreview({super.key, this.height = 272, this.isOnline});
 
   final double height;
+  final bool? isOnline;
 
   @override
   Widget build(BuildContext context) {
@@ -260,20 +447,20 @@ class DriverMapPreview extends StatelessWidget {
             const Align(
               alignment: Alignment(-0.05, -0.68),
               child: Text(
-                'NASR CITY',
+                'MAP PREVIEW',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ),
             const Align(
               alignment: Alignment(0.05, 0.48),
-              child: Text('MAADI', style: TextStyle(fontSize: 11)),
+              child: Text('ROUTE ILLUSTRATION', style: TextStyle(fontSize: 9)),
             ),
             Align(
               alignment: Alignment(-0.08, -0.35),
               child: Transform.rotate(
                 angle: -0.15,
                 child: const Text(
-                  'El Nasr Road',
+                  'Not for navigation',
                   style: TextStyle(fontSize: 10),
                 ),
               ),
@@ -288,17 +475,25 @@ class DriverMapPreview extends StatelessWidget {
                   tooltip: 'Recenter map',
                   onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('The map location is a static preview.'),
+                      content: Text(
+                        'Map tiles and turn-by-turn navigation are not connected.',
+                      ),
                     ),
                   ),
                   icon: const Icon(Icons.my_location_outlined, size: 20),
                 ),
               ),
             ),
-            const Positioned(
+            Positioned(
               left: 28,
               bottom: 12,
-              child: _MapLabel(text: 'Your location · Nasr City'),
+              child: _MapLabel(
+                text: isOnline == null
+                    ? 'Illustrative map · not live'
+                    : isOnline!
+                    ? 'Location shared · map illustration'
+                    : 'Location paused · map illustration',
+              ),
             ),
             const Positioned(
               left: 70,
@@ -455,7 +650,7 @@ class _RequestCard extends StatelessWidget {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Nearby · Nasr City → Maadi · EGP 432',
+                      'Requests are refreshing from Wasla',
                       style: TextStyle(fontSize: 13),
                     ),
                   ),
@@ -463,7 +658,7 @@ class _RequestCard extends StatelessWidget {
               ),
               SizedBox(height: 12),
               Text(
-                'Quarter Truck · 12 items · 18 km · 55 min',
+                'Offers expire automatically. Review the details before accepting.',
                 style: TextStyle(fontSize: 12),
               ),
               SizedBox(height: 12),
