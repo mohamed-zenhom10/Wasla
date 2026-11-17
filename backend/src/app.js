@@ -11,6 +11,7 @@ import adminRouter from './routes/admin/index.js';
 import driverRouter from './routes/driver.js';
 import filesRouter from './routes/files.js';
 import shipmentsRouter from './routes/shipments.js';
+import walletRouter from './routes/wallet.js';
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use(express.json({ limit: '1mb' }));
 
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/me/wallet', walletRouter);
 app.use('/api/me', meRouter);
 app.use('/api/policies', policiesRouter);
 app.use('/api/catalog', catalogRouter);

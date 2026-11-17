@@ -676,6 +676,74 @@ Errors: `PRICE_NOT_ACCEPTED`, `PRICE_TOO_OLD` (the pickup time passed, withdraw 
 
 Errors: `CANCEL_FEE` (with `fee`), `CARGO_LOADED`, `WRONG_STATUS`
 
+## Wallet
+
+Everything under `/me/wallet` needs a customer account. The customer sends money to the company account by InstaPay (`companyInstapayHandle` in `GET /catalog`), uploads the receipt, and the admin confirms it. Then the money is in the wallet and a shipment with `paymentMethod` `wallet` can be requested.
+
+### GET /me/wallet
+
+```json
+{
+  "wallet": {
+    "balance": "370.00", "available": "370.00",
+    "pendingTopups": { "count": 1, "amount": "500.00" },
+    "defaultPaymentMethod": "wallet"
+  }
+}
+```
+
+- `balance` can be below zero (a late cancel fee, or a recipient who did not pay). Then new requests are blocked until it is topped up.
+- `available` is what can be spent now.
+- `pendingTopups` are the requests the admin did not check yet. They are not in the balance.
+
+### PUT /me/wallet/payment-method
+
+```json
+{ "method": "wallet" }
+```
+
+The method the app selects first in a new shipment: `cash`, `wallet` or `null`. Returns the wallet.
+
+### GET /me/wallet/transactions?page=1
+
+20 per page, newest first. Returns `transactions`, `page` and `hasMore`.
+
+```json
+{ "id": "31", "type": "trip_payment", "amount": "-630.18", "balanceAfter": "369.82", "shipmentId": "12", "topupId": null, "withdrawalId": null, "note": null, "createdAt": "..." }
+```
+
+| `type` | Sign | When |
+|---|---|---|
+| `top_up` | + | the admin confirmed a top-up (`topupId`) |
+| `trip_payment` | - | a wallet shipment was requested (`shipmentId`) |
+| `refund` | + | a paid shipment was cancelled (`shipmentId`) |
+| `cancellation_fee` | - | a late cancel (`shipmentId`) |
+| `recipient_refused_charge` | - | the recipient did not pay the driver (`shipmentId`) |
+| `withdrawal` | - | money sent back to the customer (`withdrawalId`) |
+| `manual_adjustment` | + or - | a correction by the admin, the reason is in `note` |
+
+### POST /me/wallet/topups?amount=500&reference=123456789012
+
+The body is the receipt photo (`image/jpeg`, `png` or `webp`, up to 5 MB), like the other photos. `amount` is from `minTopupAmount` to `maxTopupAmount` (in `GET /catalog`). `reference` is the transfer number on the receipt, optional. Returns `201`:
+
+```json
+{
+  "topup": {
+    "id": "8", "amount": "500.00", "status": "awaiting_verification", "reference": "123456789012",
+    "rejectionReason": null, "proofUrl": "https://...", "createdAt": "...", "reviewedAt": null
+  }
+}
+```
+
+- `status` is `awaiting_verification`, `verified` or `rejected` (with `rejectionReason`, and the customer gets an email).
+- At most 3 requests can wait at the same time.
+
+Errors: `INVALID_INPUT` (for `amount` it has `min` and `max`), `TOO_MANY_PENDING`, `TRANSFER_USED` (this transfer number was already confirmed), `UNSUPPORTED_IMAGE`, `INVALID_IMAGE`, `STORAGE_FAILED`
+
+### GET /me/wallet/topups?page=1
+
+The customer's top-ups, 20 per page, newest first. Returns `topups`, `page` and `hasMore`.
+
 ## Admin
 
 Everything under `/admin` needs an admin account. Others get `403` with `ROLE_REQUIRED`.
@@ -802,6 +870,15 @@ Errors: `APPROVAL_INCOMPLETE` (has `missing`), `WRONG_STATUS` (only a `pending` 
 
 - `GET /admin/shipments?status=active&search=mona&page=1`: 20 per page, newest first. Same `status` as the customer list. `search` is the shipment id or the customer name, email or phone. Returns `shipments` (each with `customerId`), `page`, `pageSize` and `total`.
 - `GET /admin/shipments/:id`: returns `customer` (id, fullName, email, phone) and `shipment`, the same shape the customer sees.
+
+### Wallet top-ups
+
+- `GET /admin/topups?status=awaiting_verification&search=&page=1`: 20 per page. `status` is `awaiting_verification` (default, oldest first), `verified`, `rejected` or `all` (newest first). `search` is the top-up id, the transfer number or the customer name, email or phone. Each top-up is the shape above plus `customer` (id, fullName, email, phone). Returns `topups`, `page`, `pageSize` and `total`.
+- `GET /admin/topups/:id`: one top-up, and `customer.balance` is the wallet balance now.
+- `POST /admin/topups/:id/verify`: `{ "transferReference": "123456789012" }`, the number from the company account statement, not from the receipt. The money is added to the customer wallet. One transfer number can be used once only, also across driver debt payments.
+- `POST /admin/topups/:id/reject`: `{ "reason": "The transfer did not arrive" }`. The customer gets an email with the reason.
+
+Errors: `ALREADY_REVIEWED` (with `status`), `TRANSFER_USED`, `INVALID_INPUT`, `NOT_FOUND`
 
 ### Terms and privacy
 

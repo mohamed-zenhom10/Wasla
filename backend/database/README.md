@@ -7,6 +7,7 @@ PostgreSQL 18 + PostGIS database for Wasla.
 - `schema/wasla_schema.sql` - tables, constraints, triggers and seed data
 - `security/runtime_role.sql` - restricted role for the backend (`wasla_runtime`)
 - `tests/run_all_tests_postgis.sql` - builds the database and runs all tests
+- `updates/` - changes for a database that was built before, run them in order
 - `docs/wasla_erd.pdf` - ERD
 
 ## Setup

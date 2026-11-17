@@ -2720,7 +2720,8 @@ END$$;
 CREATE TRIGGER trg_payments_after_insert AFTER INSERT ON payments
     FOR EACH ROW EXECUTE FUNCTION payments_after_insert();
 
-CREATE FUNCTION refunds_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION refunds_guard() RETURNS trigger LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE
     p  payments%ROWTYPE;
     d  disputes%ROWTYPE;

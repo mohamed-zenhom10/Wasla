@@ -137,6 +137,18 @@ const NOTICES = {
       `Your payout account was rejected because ${REJECTION_TEXT[p.code][1]}. ${p.reason}\nAdd another account in the app.`,
     ],
   },
+  topup_rejected: {
+    ar: (p) => [
+      'طلب شحن المحفظة اترفض',
+      `مقدرناش نأكد طلب شحن محفظتك بمبلغ ${p.amount} جنيه. السبب: ${p.reason}\n`
+        + 'لو التحويل اتعمل فعلًا، ابعت طلب جديد من التطبيق بصورة أوضح للإيصال.',
+    ],
+    en: (p) => [
+      'Your wallet top-up was rejected',
+      `We could not confirm your wallet top-up of ${p.amount} EGP. Reason: ${p.reason}\n`
+        + 'If you did make the transfer, send a new request in the app with a clearer receipt.',
+    ],
+  },
 };
 
 const HTML_CHARS = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
