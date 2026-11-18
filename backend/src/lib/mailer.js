@@ -161,6 +161,48 @@ const NOTICES = {
         + 'If you did make the transfer, send it again in the app with a clearer receipt.',
     ],
   },
+  payout_paid: {
+    ar: (p) => [
+      'أرباحك اتحوّلت',
+      `حوّلنالك ${p.amount} جنيه على حساب التحويل بتاعك. رقم العملية: ${p.reference}`,
+    ],
+    en: (p) => [
+      'Your earnings were sent',
+      `We sent ${p.amount} EGP to your payout account. Transfer number: ${p.reference}`,
+    ],
+  },
+  payout_rejected: {
+    ar: (p) => [
+      'تحويل الأرباح متعملش',
+      `مقدرناش نحوّل أرباحك (${p.amount} جنيه). السبب: ${p.reason}\nرصيدك زي ما هو، وهيتحسب في التحويل الجاي.`,
+    ],
+    en: (p) => [
+      'Your earnings were not sent',
+      `We could not send your earnings (${p.amount} EGP). Reason: ${p.reason}\n`
+        + 'Your balance did not change and it will be in the next transfer.',
+    ],
+  },
+  withdrawal_paid: {
+    ar: (p) => [
+      'طلب السحب اتحوّل',
+      `حوّلنالك ${p.amount} جنيه من محفظتك على حساب التحويل بتاعك. رقم العملية: ${p.reference}`,
+    ],
+    en: (p) => [
+      'Your withdrawal was sent',
+      `We sent ${p.amount} EGP from your wallet to your payout account. Transfer number: ${p.reference}`,
+    ],
+  },
+  withdrawal_rejected: {
+    ar: (p) => [
+      'طلب السحب اترفض',
+      `مقدرناش ننفّذ طلب سحب ${p.amount} جنيه. السبب: ${p.reason}\nالمبلغ رجع متاح في محفظتك.`,
+    ],
+    en: (p) => [
+      'Your withdrawal was rejected',
+      `We could not send your withdrawal of ${p.amount} EGP. Reason: ${p.reason}\n`
+        + 'The amount is available in your wallet again.',
+    ],
+  },
 };
 
 const HTML_CHARS = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };

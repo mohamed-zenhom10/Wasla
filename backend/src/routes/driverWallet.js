@@ -5,6 +5,7 @@ import { cleanInteger } from '../lib/validate.js';
 import {
   IMAGE_TYPES, MAX_IMAGE_MB, readImage, saveImage,
 } from '../lib/storage.js';
+import { PAYOUT_SQL, toTransfer, listOwnTransfers } from '../lib/payouts.js';
 import {
   SETTLEMENT_SQL, cleanAmount, cleanReference, transferUsed, toSettlement, loadDriverWallet, listDriverEntries,
 } from '../lib/wallet.js';
@@ -51,6 +52,11 @@ router.get('/settlements', async (req, res) => {
     page,
     hasMore: rows.length > PAGE_SIZE,
   });
+});
+
+router.get('/payouts', async (req, res) => {
+  const { rows, page, hasMore } = await listOwnTransfers(PAYOUT_SQL, req.user.id, readPage(req));
+  res.json({ payouts: rows.map((row) => toTransfer(row)), page, hasMore });
 });
 
 router.post('/settlements', imageBody, async (req, res) => {

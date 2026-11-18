@@ -69,7 +69,9 @@ export async function loadWallet(customerId) {
             (SELECT count(*)::int FROM customer_topups t
              WHERE t.customer_id = u.id AND t.status = 'awaiting_verification') AS pending_count,
             (SELECT COALESCE(sum(t.amount), 0)::numeric(12,2) FROM customer_topups t
-             WHERE t.customer_id = u.id AND t.status = 'awaiting_verification') AS pending_amount
+             WHERE t.customer_id = u.id AND t.status = 'awaiting_verification') AS pending_amount,
+            (SELECT w.amount FROM customer_withdrawals w
+             WHERE w.customer_id = u.id AND w.status = 'requested') AS pending_withdrawal
      FROM users u WHERE u.id = $1`,
     [customerId],
   );
@@ -77,6 +79,7 @@ export async function loadWallet(customerId) {
     balance: row.balance,
     available: row.available,
     pendingTopups: { count: row.pending_count, amount: row.pending_amount },
+    pendingWithdrawal: row.pending_withdrawal,
     defaultPaymentMethod: row.default_payment_method,
   };
 }
@@ -164,6 +167,8 @@ export async function loadDriverWallet(driverId) {
              WHERE s.driver_id = dp.user_id AND s.status = 'awaiting_verification') AS pending_count,
             (SELECT COALESCE(sum(s.amount), 0)::numeric(12,2) FROM driver_settlements s
              WHERE s.driver_id = dp.user_id AND s.status = 'awaiting_verification') AS pending_amount,
+            (SELECT p.amount FROM payout_requests p
+             WHERE p.driver_id = dp.user_id AND p.status = 'requested') AS pending_payout,
             e.today_net, e.today_trips, e.week_net, e.week_trips
      FROM driver_profiles dp
      CROSS JOIN (
@@ -198,6 +203,7 @@ export async function loadDriverWallet(driverId) {
     debtLeft: row.debt_left,
     blocked: row.blocked,
     pendingSettlements: { count: row.pending_count, amount: row.pending_amount },
+    pendingPayout: row.pending_payout,
     today: { net: row.today_net, trips: row.today_trips },
     week: { net: row.week_net, trips: row.week_trips },
   };

@@ -511,6 +511,7 @@ A cash trip puts the platform commission on the driver as a debt (the balance go
   "wallet": {
     "balance": "-155.00", "debtLimit": "1000.00", "debtLimitOverride": null, "debtLeft": "845.00", "blocked": false,
     "pendingSettlements": { "count": 1, "amount": "100.00" },
+    "pendingPayout": null,
     "today": { "net": "1200.00", "trips": 3 },
     "week": { "net": "5400.00", "trips": 14 }
   }
@@ -521,6 +522,7 @@ A cash trip puts the platform commission on the driver as a debt (the balance go
 - `debtLeft` is how much more debt fits before the limit. `blocked` is true when the debt passed it (`debt_over_limit` in `GET /driver/status`).
 - `today.net` is what the driver kept from the trips delivered today (cash or wallet, after the commission) plus late cancel fees he got. `trips` counts delivered trips only. It is not the wallet movement.
 - `week` is the same from Saturday. Days are by Cairo time.
+- `pendingPayout` is the amount of the weekly transfer that waits for the admin, or null. It stays in the balance until it is paid.
 
 ### GET /driver/wallet/transactions?page=1
 
@@ -551,9 +553,15 @@ Errors: `INVALID_INPUT` (for `amount` it has `max`), `NOTHING_TO_SETTLE` (no deb
 
 The driver's debt payments, 20 per page, newest first. Returns `settlements`, `page` and `hasMore`.
 
+### GET /driver/wallet/payouts?page=1
+
+The weekly transfers to the driver, 20 per page, newest first. Returns `payouts`, `page` and `hasMore`. Each one has `id`, `amount`, `status` (`requested`, `paid`, `rejected`), `reference`, `rejectionReason`, `account` (method, holderName, bankName, accountLast4), `createdAt` and `processedAt`.
+
+The driver does not ask for a payout. Every week on `driverPayoutWeekday` (0 is Sunday) the server makes one for the whole balance of each driver who has a positive balance and an approved payout account. The driver gets an email when it is paid or rejected.
+
 ## Payout account
 
-For any logged in user. Drivers get their earnings here every week, customers will use it to take money out of their wallet.
+For any logged in user. Drivers get their earnings here every week, customers use it to take money out of their wallet.
 
 ### GET /me/payout-account
 
@@ -740,13 +748,14 @@ Everything under `/me/wallet` needs a customer account. The customer sends money
   "wallet": {
     "balance": "370.00", "available": "370.00",
     "pendingTopups": { "count": 1, "amount": "500.00" },
+    "pendingWithdrawal": null,
     "defaultPaymentMethod": "wallet"
   }
 }
 ```
 
 - `balance` can be below zero (a late cancel fee, or a recipient who did not pay). Then new requests are blocked until it is topped up.
-- `available` is what can be spent now.
+- `available` is what can be spent now: the balance without `pendingWithdrawal`, the amount of a withdrawal that waits for the admin (or null).
 - `pendingTopups` are the requests the admin did not check yet. They are not in the balance.
 
 ### PUT /me/wallet/payment-method
@@ -796,6 +805,38 @@ Errors: `INVALID_INPUT` (for `amount` it has `min` and `max`), `TOO_MANY_PENDING
 ### GET /me/wallet/topups?page=1
 
 The customer's top-ups, 20 per page, newest first. Returns `topups`, `page` and `hasMore`.
+
+### POST /me/wallet/withdrawals
+
+```json
+{ "amount": "200.00" }
+```
+
+Asks to get money back from the wallet. It is sent by the admin to the customer's payout account (`PUT /me/payout-account`), which must be approved first. The amount is held until the admin pays or rejects, and one request can wait at a time. Returns `201`:
+
+```json
+{
+  "withdrawal": {
+    "id": "3", "amount": "200.00", "status": "requested", "reference": null, "rejectionReason": null,
+    "account": { "method": "wallet", "holderName": "Mona Ali", "bankName": "Vodafone Cash", "accountLast4": "4567" },
+    "createdAt": "...", "processedAt": null
+  }
+}
+```
+
+- `status` is `requested`, `paid` (with `reference`, the transfer number) or `rejected` (with `rejectionReason`). The customer gets an email for both.
+
+Errors: `PAYOUT_ACCOUNT_REQUIRED` (with `accountStatus`: null, `pending` or `rejected`), `WITHDRAWAL_PENDING`, `INVALID_INPUT` (for `amount` it has `max`)
+
+### POST /me/wallet/withdrawals/:id/cancel
+
+No body. The customer takes back a request that still waits. It becomes `rejected` with `rejectionReason` `cancelled_by_customer`.
+
+Errors: `ALREADY_REVIEWED` (with `status`), `NOT_FOUND`
+
+### GET /me/wallet/withdrawals?page=1
+
+20 per page, newest first. Returns `withdrawals`, `page` and `hasMore`.
 
 ## Admin
 
@@ -943,6 +984,20 @@ Same as wallet top-ups, for the payments of `POST /driver/wallet/settlements`:
 - `POST /admin/settlements/:id/reject`: `{ "reason": "..." }`. The driver gets an email with the reason.
 
 Errors: `ALREADY_REVIEWED` (with `status`), `TRANSFER_USED`, `INVALID_INPUT`, `NOT_FOUND`
+
+### Driver payouts
+
+- `GET /admin/payouts?status=requested&search=&page=1`: 20 per page. `status` is `requested` (default, oldest first), `paid`, `rejected` or `all` (newest first). `search` is the id, the transfer number or the driver name, email or phone. Each one has `driver` (id, fullName, email, phone) and the full `account.accountNumber`. `account.usable` is false when the driver changed the account after the payout was made. Returns `payouts`, `page`, `pageSize` and `total`.
+- `GET /admin/payouts/:id`: with `driver.balance` now.
+- `POST /admin/payouts/:id/pay`: `{ "transferReference": "..." }` after sending the money. The amount leaves the driver wallet.
+- `POST /admin/payouts/:id/reject`: `{ "reason": "..." }`. The balance does not change.
+- `POST /admin/payouts/run`: `{ "driverId": "15" }` makes a payout now without waiting for the weekly day, for one driver, or for every driver when `driverId` is not sent. Returns `{ "created": 1 }`. Nothing is made for a driver who has no positive balance, no approved account, or a payout that still waits.
+
+Errors: `ALREADY_REVIEWED` (with `status`), `BALANCE_TOO_LOW` (the balance is now less than the payout, with `balance` and `amount`: reject it and run again), `ACCOUNT_CHANGED` (reject it), `INVALID_INPUT`, `NOT_FOUND`
+
+### Customer withdrawals
+
+Same as driver payouts, for the requests of `POST /me/wallet/withdrawals`: `GET /admin/withdrawals`, `GET /admin/withdrawals/:id` (with `customer.balance`), `POST /admin/withdrawals/:id/pay` and `POST /admin/withdrawals/:id/reject`. Each one has `customer` instead of `driver`. There is no `run`.
 
 ### Wallets and corrections
 
