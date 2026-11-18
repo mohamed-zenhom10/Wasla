@@ -9,6 +9,8 @@ import driversRouter from './drivers.js';
 import shipmentsRouter from './shipments.js';
 import tripsRouter from './trips.js';
 import topupsRouter from './topups.js';
+import settlementsRouter from './settlements.js';
+import walletsRouter from './wallets.js';
 
 const router = Router();
 
@@ -21,10 +23,12 @@ router.get('/catalog', async (req, res) => {
 router.use(catalogRouter);
 router.use(driversRouter);
 router.use(tripsRouter);
+router.use(walletsRouter);
 router.use('/zones', zonesRouter);
 router.use('/settings', settingsRouter);
 router.use('/policies', policiesRouter);
 router.use('/shipments', shipmentsRouter);
 router.use('/topups', topupsRouter);
+router.use('/settlements', settlementsRouter);
 
 export default router;

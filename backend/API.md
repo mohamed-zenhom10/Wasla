@@ -498,6 +498,59 @@ The driver can cancel until the cargo is loaded. The shipment goes back to searc
 
 Errors: `CARGO_LOADED`, `TRIP_FINISHED`, `INVALID_INPUT`
 
+## Driver wallet
+
+Everything under `/driver/wallet` needs a driver account with a saved profile, otherwise `PROFILE_REQUIRED`.
+
+A cash trip puts the platform commission on the driver as a debt (the balance goes down). A wallet trip adds the earning to the balance. When the debt passes the limit the driver cannot go online until he pays it by InstaPay to the company account (`companyInstapayHandle` in `GET /catalog`) and the admin confirms it.
+
+### GET /driver/wallet
+
+```json
+{
+  "wallet": {
+    "balance": "-155.00", "debtLimit": "1000.00", "debtLimitOverride": null, "debtLeft": "845.00", "blocked": false,
+    "pendingSettlements": { "count": 1, "amount": "100.00" },
+    "today": { "net": "1200.00", "trips": 3 },
+    "week": { "net": "5400.00", "trips": 14 }
+  }
+}
+```
+
+- `balance` below zero is what the driver owes. Above zero is what the platform owes him.
+- `debtLeft` is how much more debt fits before the limit. `blocked` is true when the debt passed it (`debt_over_limit` in `GET /driver/status`).
+- `today.net` is what the driver kept from the trips delivered today (cash or wallet, after the commission) plus late cancel fees he got. `trips` counts delivered trips only. It is not the wallet movement.
+- `week` is the same from Saturday. Days are by Cairo time.
+
+### GET /driver/wallet/transactions?page=1
+
+20 per page, newest first. Returns `transactions`, `page` and `hasMore`.
+
+```json
+{ "id": "52", "type": "commission_charge", "amount": "-94.53", "balanceAfter": "-155.00", "tripId": "7", "shipmentId": "12", "settlementId": null, "payoutId": null, "note": null, "createdAt": "..." }
+```
+
+| `type` | Sign | When |
+|---|---|---|
+| `trip_earning` | + | a wallet trip was delivered |
+| `commission_charge` | - | a cash trip was delivered |
+| `cancellation_compensation` | + | the customer cancelled late |
+| `coupon_compensation` | + | a cash trip with a coupon |
+| `debt_settlement` | + | the admin confirmed a debt payment (`settlementId`) |
+| `payout` | - | the weekly transfer to the driver (`payoutId`) |
+| `refund_charge`, `collected_cash_charge` | - | a refund the driver has to cover |
+| `manual_adjustment` | + or - | a correction by the admin, the reason is in `note` |
+
+### POST /driver/wallet/settlements?amount=155&reference=123456789012
+
+Pays the debt. The body is the receipt photo, like the other photos. `amount` is at most the debt that is not covered by waiting payments. `reference` is optional. Returns `201` with `{ "settlement": { ... } }`, the same shape as a top-up: `id`, `amount`, `status`, `reference`, `rejectionReason`, `proofUrl`, `createdAt`, `reviewedAt`.
+
+Errors: `INVALID_INPUT` (for `amount` it has `max`), `NOTHING_TO_SETTLE` (no debt left to pay, has `balance`), `TOO_MANY_PENDING` (3 are waiting), `TRANSFER_USED`, `PROFILE_REQUIRED`, `UNSUPPORTED_IMAGE`, `INVALID_IMAGE`, `STORAGE_FAILED`
+
+### GET /driver/wallet/settlements?page=1
+
+The driver's debt payments, 20 per page, newest first. Returns `settlements`, `page` and `hasMore`.
+
 ## Payout account
 
 For any logged in user. Drivers get their earnings here every week, customers will use it to take money out of their wallet.
@@ -879,6 +932,27 @@ Errors: `APPROVAL_INCOMPLETE` (has `missing`), `WRONG_STATUS` (only a `pending` 
 - `POST /admin/topups/:id/reject`: `{ "reason": "The transfer did not arrive" }`. The customer gets an email with the reason.
 
 Errors: `ALREADY_REVIEWED` (with `status`), `TRANSFER_USED`, `INVALID_INPUT`, `NOT_FOUND`
+
+### Driver debt payments
+
+Same as wallet top-ups, for the payments of `POST /driver/wallet/settlements`:
+
+- `GET /admin/settlements?status=awaiting_verification&search=&page=1`: each one has `driver` (id, fullName, email, phone). Returns `settlements`, `page`, `pageSize` and `total`.
+- `GET /admin/settlements/:id`: with `driver.balance` and `driver.debtLimit` now.
+- `POST /admin/settlements/:id/verify`: `{ "transferReference": "..." }`. The amount is taken off the driver debt.
+- `POST /admin/settlements/:id/reject`: `{ "reason": "..." }`. The driver gets an email with the reason.
+
+Errors: `ALREADY_REVIEWED` (with `status`), `TRANSFER_USED`, `INVALID_INPUT`, `NOT_FOUND`
+
+### Wallets and corrections
+
+`:kind` is `customers` or `drivers`, `:id` is the user id.
+
+- `GET /admin/wallets/:kind/:id?page=1`: returns `owner` (id, fullName, email, phone), `wallet` (the shape the user sees), and `transactions`, `page`, `hasMore`.
+- `POST /admin/wallets/:kind/:id/adjust`: `{ "amount": "-50.00", "reason": "Charged twice for shipment 12" }`. Adds a `manual_adjustment` line, plus or minus. `reason` is needed and the user sees it. Returns `201` with the wallet again.
+- `PUT /admin/drivers/:id/debt-limit`: `{ "debtLimit": "3000.00" }` gives one driver his own limit, `null` puts him back on `defaultDebtLimit`. Returns the driver wallet.
+
+Errors: `INVALID_INPUT`, `NOT_FOUND`
 
 ### Terms and privacy
 

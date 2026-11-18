@@ -18,6 +18,7 @@ import {
   readPoint, readAccuracy, loadState, blockersOf, blockerError, loadStatus,
 } from '../lib/presence.js';
 import tripsRouter from './driverTrips.js';
+import walletRouter from './driverWallet.js';
 import { EXECUTING, trackPoint } from '../lib/trips.js';
 
 const router = Router();
@@ -26,6 +27,7 @@ const imageBody = express.raw({ type: IMAGE_TYPES, limit: `${MAX_IMAGE_MB}mb` })
 
 router.use(requireAuth, requireRole('driver'));
 router.use(tripsRouter);
+router.use('/wallet', walletRouter);
 
 function actorOf(req) {
   return { id: req.user.id, role: 'driver' };

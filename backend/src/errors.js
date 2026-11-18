@@ -22,6 +22,7 @@ const CONSTRAINT_ERRORS = {
   ex_trips_driver_executing: [409, 'ANOTHER_TRIP_RUNNING', 'Finish your current trip first'],
   ex_trips_vehicle_executing: [409, 'ANOTHER_TRIP_RUNNING', 'Finish your current trip first'],
   uq_topup_verified_reference: [409, 'TRANSFER_USED', 'This transfer was already used for another payment'],
+  uq_settlement_verified_reference: [409, 'TRANSFER_USED', 'This transfer was already used for another payment'],
 };
 
 function duplicateField(detail) {

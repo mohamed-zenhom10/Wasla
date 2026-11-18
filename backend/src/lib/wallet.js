@@ -117,3 +117,123 @@ export async function listEntries(customerId, page) {
     hasMore: rows.length > PAGE_SIZE,
   };
 }
+
+export const SETTLEMENT_SQL = `
+  SELECT t.id, t.driver_id, t.amount, t.proof_storage_key, t.transfer_reference, t.status,
+         t.verified_at, t.rejection_reason, t.created_at, u.full_name, u.email, u.phone
+  FROM driver_settlements t JOIN users u ON u.id = t.driver_id`;
+
+export function toSettlement(row, baseUrl, forAdmin = false) {
+  const settlement = {
+    id: row.id,
+    amount: row.amount,
+    status: row.status,
+    reference: row.transfer_reference,
+    rejectionReason: row.rejection_reason,
+    proofUrl: imageUrl(row.proof_storage_key, baseUrl),
+    createdAt: row.created_at,
+    reviewedAt: row.verified_at,
+  };
+  if (forAdmin) {
+    settlement.driver = { id: row.driver_id, fullName: row.full_name, email: row.email, phone: row.phone };
+  }
+  return settlement;
+}
+
+export function cleanAdjustment(value, field) {
+  const text = typeof value === 'number' && Number.isFinite(value) ? String(value) : value;
+  if (typeof text !== 'string' || !/^-?[0-9]{1,7}(\.[0-9]{1,2})?$/.test(text.trim())) {
+    throw invalid(field, `${field} must be a number like 50.00 or -50.00`);
+  }
+  if (Number(text) === 0) {
+    throw invalid(field, `${field} cannot be zero`);
+  }
+  return text.trim();
+}
+
+const CAIRO_DAY = "date_trunc('day', now() AT TIME ZONE 'Africa/Cairo')";
+
+export async function loadDriverWallet(driverId) {
+  const { rows: [row] } = await query(
+    `SELECT driver_balance(dp.user_id)::numeric(12,2) AS balance,
+            driver_debt_limit(dp.user_id)::numeric(12,2) AS debt_limit,
+            dp.debt_limit_override,
+            GREATEST(driver_balance(dp.user_id) + driver_debt_limit(dp.user_id), 0)::numeric(12,2) AS debt_left,
+            driver_balance(dp.user_id) < -driver_debt_limit(dp.user_id) AS blocked,
+            (SELECT count(*)::int FROM driver_settlements s
+             WHERE s.driver_id = dp.user_id AND s.status = 'awaiting_verification') AS pending_count,
+            (SELECT COALESCE(sum(s.amount), 0)::numeric(12,2) FROM driver_settlements s
+             WHERE s.driver_id = dp.user_id AND s.status = 'awaiting_verification') AS pending_amount,
+            e.today_net, e.today_trips, e.week_net, e.week_trips
+     FROM driver_profiles dp
+     CROSS JOIN (
+       SELECT ${CAIRO_DAY} AT TIME ZONE 'Africa/Cairo' AS day_start,
+              (${CAIRO_DAY} - make_interval(days => (extract(dow FROM ${CAIRO_DAY})::int + 1) % 7))
+                AT TIME ZONE 'Africa/Cairo' AS week_start
+     ) b
+     CROSS JOIN LATERAL (
+       SELECT COALESCE(sum(earned) FILTER (WHERE done_at >= b.day_start), 0)::numeric(12,2) AS today_net,
+              count(*) FILTER (WHERE delivered AND done_at >= b.day_start)::int AS today_trips,
+              COALESCE(sum(earned), 0)::numeric(12,2) AS week_net,
+              count(*) FILTER (WHERE delivered)::int AS week_trips
+       FROM (
+         SELECT t.status = 'delivered' AS delivered,
+                COALESCE(t.delivered_at, t.cancelled_at) AS done_at,
+                CASE WHEN t.status = 'delivered' THEN t.driver_earning_amount ELSE t.cancellation_fee END AS earned
+         FROM trips t
+         WHERE t.driver_id = dp.user_id AND t.status IN ('delivered', 'cancelled')
+           AND COALESCE(t.delivered_at, t.cancelled_at) >= b.week_start
+       ) done
+     ) e
+     WHERE dp.user_id = $1`,
+    [driverId],
+  );
+  if (!row) {
+    return null;
+  }
+  return {
+    balance: row.balance,
+    debtLimit: row.debt_limit,
+    debtLimitOverride: row.debt_limit_override,
+    debtLeft: row.debt_left,
+    blocked: row.blocked,
+    pendingSettlements: { count: row.pending_count, amount: row.pending_amount },
+    today: { net: row.today_net, trips: row.today_trips },
+    week: { net: row.week_net, trips: row.week_trips },
+  };
+}
+
+function toDriverEntry(row) {
+  return {
+    id: row.id,
+    type: row.entry_type,
+    amount: row.amount,
+    balanceAfter: row.balance_after,
+    tripId: row.trip_id,
+    shipmentId: row.shipment_id,
+    settlementId: row.settlement_id,
+    payoutId: row.payout_request_id,
+    note: row.entry_type === 'manual_adjustment' ? row.note : null,
+    createdAt: row.created_at,
+  };
+}
+
+export async function listDriverEntries(driverId, page) {
+  const { rows } = await query(
+    `SELECT * FROM (
+       SELECT e.id, e.entry_type, e.amount, e.trip_id, e.settlement_id, e.payout_request_id, e.note, e.created_at,
+              tr.shipment_id, sum(e.amount) OVER (ORDER BY e.id) AS balance_after
+       FROM wallet_transactions e
+       LEFT JOIN trips tr ON tr.id = e.trip_id
+       WHERE e.driver_id = $1
+     ) entries
+     ORDER BY id DESC
+     LIMIT ${PAGE_SIZE + 1} OFFSET $2`,
+    [driverId, (page - 1) * PAGE_SIZE],
+  );
+  return {
+    transactions: rows.slice(0, PAGE_SIZE).map(toDriverEntry),
+    page,
+    hasMore: rows.length > PAGE_SIZE,
+  };
+}

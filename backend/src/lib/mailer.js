@@ -149,6 +149,18 @@ const NOTICES = {
         + 'If you did make the transfer, send a new request in the app with a clearer receipt.',
     ],
   },
+  settlement_rejected: {
+    ar: (p) => [
+      'سداد المديونية اترفض',
+      `مقدرناش نأكد سداد مديونيتك بمبلغ ${p.amount} جنيه. السبب: ${p.reason}\n`
+        + 'لو التحويل اتعمل فعلًا، ابعته تاني من التطبيق بصورة أوضح للإيصال.',
+    ],
+    en: (p) => [
+      'Your debt payment was rejected',
+      `We could not confirm your debt payment of ${p.amount} EGP. Reason: ${p.reason}\n`
+        + 'If you did make the transfer, send it again in the app with a clearer receipt.',
+    ],
+  },
 };
 
 const HTML_CHARS = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
