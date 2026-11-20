@@ -2,7 +2,7 @@ import { query } from '../db.js';
 import { AppError } from '../errors.js';
 import { imageUrl } from './storage.js';
 import { estimateRoute, POINT_SQL } from './route.js';
-import { shipmentTrip } from './trips.js';
+import { shipmentTrip, loadTracking, BEFORE_LOADING } from './trips.js';
 import { checkCoupon, minOrderError } from './coupons.js';
 import { invalid, cleanInteger, cleanChoice, cleanRef } from './validate.js';
 import {
@@ -457,15 +457,76 @@ export async function requestGroup(client, locked, customerId) {
   );
 }
 
-export async function cancelGroup(client, locked, reason) {
-  if (locked.status !== 'draft' && locked.status !== 'searching_driver') {
+export async function lockGroupTrips(client, groupId) {
+  const { rows } = await client.query(
+    `SELECT t.id, t.status, ps.cancellation_fee
+     FROM trips t CROSS JOIN platform_settings ps
+     WHERE t.group_id = $1 AND t.status NOT IN ('delivered', 'cancelled')
+     ORDER BY t.id
+     FOR UPDATE OF t`,
+    [groupId],
+  );
+  return rows;
+}
+
+export async function cancelGroup(client, locked, reason, trips, acceptFee) {
+  if (locked.status === 'draft' || locked.status === 'searching_driver') {
+    await client.query(
+      `UPDATE shipments SET status = 'cancelled', cancellation_reason = $2
+       WHERE group_id = $1 AND status IN ('draft', 'searching_driver')`,
+      [locked.group.id, reason],
+    );
+    return;
+  }
+  if (locked.status !== 'driver_assigned' && locked.status !== 'in_progress') {
     throw wrongStatus(locked.status);
   }
-  await client.query(
-    `UPDATE shipments SET status = 'cancelled', cancellation_reason = $2
-     WHERE group_id = $1 AND status IN ('draft', 'searching_driver')`,
-    [locked.group.id, reason],
+  if (trips.length === 0 || trips.some((trip) => !BEFORE_LOADING.includes(trip.status))) {
+    throw new AppError(409, 'CARGO_LOADED', 'The cargo is loaded, contact support to cancel');
+  }
+  const late = trips.filter((trip) => trip.status !== 'assigned');
+  if (late.length > 0 && acceptFee !== true) {
+    const { rows: [fee] } = await client.query(
+      'SELECT cancellation_fee AS each, (cancellation_fee * $1)::numeric(12,2) AS total FROM platform_settings',
+      [late.length],
+    );
+    throw new AppError(409, 'CANCEL_FEE', 'The driver is on the way, cancelling now has a fee for every drop-off', {
+      fee: fee.total, feePerStop: fee.each, stops: late.length,
+    });
+  }
+  for (const trip of trips) {
+    await client.query(
+      "UPDATE trips SET status = 'cancelled', cancellation_reason = $2 WHERE id = $1",
+      [trip.id, reason],
+    );
+  }
+}
+
+export async function loadGroupTracking(id) {
+  const { rows: [group] } = await query(
+    `SELECT ${GROUP_STATUS} AS status FROM shipment_groups g WHERE g.id = $1`,
+    [id],
   );
+  const { rows: stops } = await query(
+    `SELECT s.id FROM shipments s WHERE s.group_id = $1 AND s.status <> 'cancelled' ORDER BY s.delivery_sequence`,
+    [id],
+  );
+  const tracks = await Promise.all(stops.map((stop) => loadTracking(stop.id)));
+  const moving = tracks.find((track) => track.driverLocation) || tracks.find((track) => track.signal) || null;
+  return {
+    status: group.status,
+    signal: moving ? moving.signal : null,
+    driverLocation: moving ? moving.driverLocation : null,
+    stops: tracks.map((track, i) => ({
+      stopId: stops[i].id,
+      order: i + 1,
+      status: track.shipmentStatus,
+      tripId: track.tripId,
+      tripStatus: track.tripStatus,
+      nextStop: track.nextStop,
+      distanceToNextStopM: track.distanceToNextStopM,
+    })),
+  };
 }
 
 function toOption(rows, recommended) {
@@ -581,6 +642,7 @@ export async function loadGroup(id, baseUrl, recommendedId) {
   const recommended = recommendedId === undefined ? (offered[0] ? offered[0][0].vehicle_type_id : null) : recommendedId;
 
   const first = stops[0];
+  const live = trips.find((trip) => trip);
   const cancelled = group.status === 'cancelled'
     ? [...stops].sort((a, b) => new Date(b.cancelled_at) - new Date(a.cancelled_at))[0] : null;
   return {
@@ -591,6 +653,8 @@ export async function loadGroup(id, baseUrl, recommendedId) {
     pickupType: first ? first.pickup_type : null,
     pickupWindowStart: first ? first.pickup_window_start : null,
     pickupWindowEnd: first ? first.pickup_window_end : null,
+    driver: live ? live.driver : null,
+    vehicle: live ? live.vehicle : null,
     createdAt: group.created_at,
     cancelledAt: cancelled ? cancelled.cancelled_at : null,
     cancellationParty: cancelled ? cancelled.cancellation_party : null,
@@ -601,21 +665,41 @@ export async function loadGroup(id, baseUrl, recommendedId) {
   };
 }
 
+const LIST_JOINS = `LEFT JOIN LATERAL (
+  SELECT COALESCE(NULLIF(count(*) FILTER (WHERE s.status <> 'cancelled'), 0), count(*))::int AS stops,
+         COALESCE(min(s.pickup_window_start) FILTER (WHERE s.status <> 'cancelled'), min(s.pickup_window_start))
+           AS pickup_window_start
+  FROM shipments s WHERE s.group_id = g.id
+) x ON true
+LEFT JOIN LATERAL (
+  SELECT min(q.vehicle_type_id) AS vehicle_type_id, sum(q.customer_amount) AS customer_amount
+  FROM price_quotes q JOIN shipments s ON s.id = q.shipment_id
+  WHERE s.group_id = g.id AND q.status = 'accepted' AND (s.status <> 'cancelled' OR NOT EXISTS (
+    SELECT 1 FROM shipments z WHERE z.group_id = g.id AND z.status <> 'cancelled'))
+) p ON true`;
+
 export const GROUP_LIST_SQL = `SELECT * FROM (
   SELECT g.id, g.pickup_address, g.created_at, ${GROUP_STATUS} AS status,
          x.stops, x.pickup_window_start, p.vehicle_type_id, p.customer_amount
   FROM shipment_groups g
-  LEFT JOIN LATERAL (
-    SELECT COALESCE(NULLIF(count(*) FILTER (WHERE s.status <> 'cancelled'), 0), count(*))::int AS stops,
-           min(s.pickup_window_start) FILTER (WHERE s.status <> 'cancelled') AS pickup_window_start
-    FROM shipments s WHERE s.group_id = g.id
-  ) x ON true
-  LEFT JOIN LATERAL (
-    SELECT min(q.vehicle_type_id) AS vehicle_type_id, sum(q.customer_amount) AS customer_amount
-    FROM price_quotes q JOIN shipments s ON s.id = q.shipment_id
-    WHERE s.group_id = g.id AND s.status <> 'cancelled' AND q.status = 'accepted'
-  ) p ON true
+  ${LIST_JOINS}
   WHERE g.customer_id = $1
+) l`;
+
+export const ADMIN_GROUP_LIST_SQL = `SELECT * FROM (
+  SELECT g.id, g.customer_id, u.full_name AS customer_name, g.pickup_address, g.created_at,
+         ${GROUP_STATUS} AS status, x.stops, x.pickup_window_start, p.vehicle_type_id, p.customer_amount,
+         d.driver_id, d.driver_name
+  FROM shipment_groups g
+  JOIN users u ON u.id = g.customer_id
+  ${LIST_JOINS}
+  LEFT JOIN LATERAL (
+    SELECT t.driver_id, du.full_name AS driver_name FROM trips t JOIN users du ON du.id = t.driver_id
+    WHERE t.group_id = g.id AND t.status <> 'cancelled'
+    LIMIT 1
+  ) d ON true
+  WHERE ($1::text IS NULL OR g.id::text = $2 OR u.full_name ILIKE $1 OR u.email ILIKE $1 OR u.phone LIKE $1
+         OR d.driver_name ILIKE $1)
 ) l`;
 
 export function toGroupSummary(row) {

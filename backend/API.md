@@ -828,6 +828,7 @@ Every request below returns `{ "group": { ... } }`:
     "pickup": { "address": "...", "lat": 30.0444, "lng": 31.2357, "notes": "Gate 2", "zoneId": null },
     "helpersCount": 1,
     "pickupType": "now", "pickupWindowStart": "...", "pickupWindowEnd": "...",
+    "driver": null, "vehicle": null,
     "createdAt": "...", "cancelledAt": null, "cancellationParty": null, "cancellationReason": null,
     "stops": [
       { "id": "41", "order": 1, "status": "draft",
@@ -858,6 +859,7 @@ Every request below returns `{ "group": { ... } }`:
 - Every drop-off takes the pickup, the helpers and the pickup time of the order.
 - `quotes` has one choice per vehicle type. The totals are for the whole order, and `stops` has the price of each drop-off. `customerAmount` of a drop-off is what its payer pays.
 - `acceptedPrice` is the accepted choice, in the same shape, or null.
+- `driver` and `vehicle` are the same as in the `trip` of each drop-off (one driver for the whole order), or null.
 - `deliveryCode` is per drop-off. Share each one with its recipient only.
 - A cancelled order shows the drop-offs that were cancelled with it.
 
@@ -955,15 +957,41 @@ No body. Sends the whole order to the drivers, every drop-off becomes `searching
 
 Errors: `PRICE_NOT_ACCEPTED`, `GROUP_TOO_SMALL`, `PRICE_TOO_OLD`, `POLICIES_NOT_ACCEPTED`, `WALLET_NEGATIVE`, `WALLET_TOO_LOW` (`needed` is the total of the wallet drop-offs), `WRONG_STATUS`
 
+### GET /shipment-groups/:id/tracking
+
+Where the driver is, for the whole order. Call it every 10 to 15 seconds while the order is on the way.
+
+```json
+{
+  "tracking": {
+    "status": "in_progress", "signal": "live",
+    "driverLocation": { "lat": 30.0464, "lng": 31.2377, "accuracyM": 12, "recordedAt": "..." },
+    "stops": [
+      { "stopId": "41", "order": 1, "status": "in_progress", "tripId": "8", "tripStatus": "heading_to_dropoff",
+        "nextStop": "dropoff", "distanceToNextStopM": 2380 }
+    ]
+  }
+}
+```
+
+- `signal` and `driverLocation` are the same as in `GET /shipments/:id/tracking`, null when the driver is not moving.
+- For each drop-off: `nextStop` is `pickup` (the driver is going to the pickup) or `dropoff` (going to this drop-off), and `distanceToNextStopM` is the straight distance to it. Both are null before the driver starts and after delivery.
+
 ### POST /shipment-groups/:id/cancel
 
 ```json
-{ "reason": "Changed my mind" }
+{ "reason": "Changed my mind", "acceptFee": true }
 ```
 
-Cancels every drop-off, for free, while the order is a `draft` or `searching_driver`. The wallet money and the coupon come back. A single drop-off cannot be cancelled after the request.
+Cancels every drop-off at once. A single drop-off cannot be cancelled after the request.
 
-Errors: `WRONG_STATUS`
+- `draft` or `searching_driver`: free.
+- A driver accepted but did not start: free.
+- The driver started (on the way, or at the pickup): there is a fee for **every** drop-off (`cancellationFee` in settings, 50 each). Without `"acceptFee": true` it returns `CANCEL_FEE` with `fee` (the total), `feePerStop` and `stops`, and nothing is cancelled. Show it and ask the customer.
+- After loading: `CARGO_LOADED`, the customer has to contact support.
+- The wallet money and the coupon come back. The fee comes out of the customer wallet (even below zero) and goes to the driver.
+
+Errors: `CANCEL_FEE`, `CARGO_LOADED`, `WRONG_STATUS`
 
 ## Wallet
 
@@ -1192,6 +1220,13 @@ Errors: `APPROVAL_INCOMPLETE` (has `missing`), `WRONG_STATUS` (only a `pending` 
 
 - `GET /admin/shipments?status=active&search=mona&page=1`: 20 per page, newest first. Same `status` as the customer list. `search` is the shipment id or the customer name, email or phone. Returns `shipments` (each with `customerId`), `page`, `pageSize` and `total`.
 - `GET /admin/shipments/:id`: returns `customer` (id, fullName, email, phone) and `shipment`, the same shape the customer sees.
+- The drop-offs of a grouped order are in this list too, each with its `groupId`.
+
+### Grouped orders
+
+- `GET /admin/shipment-groups?status=active&search=mona&page=1`: 20 per page, newest first. Same `status` as the customer list. `search` is the order id, the customer name, email or phone, or the driver name. Each order is the short shape of `GET /shipment-groups` plus `customer` (id, name) and `driver` (id, name, or null). A cancelled order shows the vehicle and total it had. Returns `groups`, `page`, `pageSize` and `total`.
+- `GET /admin/shipment-groups/:id`: returns `customer` (id, fullName, email, phone), `group` (the same shape the customer sees, with each drop-off's `trip`) and `tracking` (the same as `GET /shipment-groups/:id/tracking`).
+- Each drop-off has its own trip in `GET /admin/trips`, with `groupId`. Cancelling one of them before loading (`POST /admin/trips/:id/cancel`) cancels all the trips of the order, and the order goes back to searching for another driver.
 
 ### Wallet top-ups
 
@@ -1280,7 +1315,7 @@ Errors: `DRAFT_EXISTS` (only one draft per type, the error has its `id`), `ALREA
 `status` is `active` (default), `finished` or `all`. `search` matches the trip number, the shipment number, or the driver's or customer's name or phone. 20 per page. Returns `trips`, `page`, `pageSize`, `total`:
 
 ```json
-{ "id": "7", "status": "heading_to_pickup", "shipmentId": "12", "fareAmount": "630.18",
+{ "id": "7", "status": "heading_to_pickup", "shipmentId": "12", "groupId": null, "fareAmount": "630.18",
   "driver": { "id": "15", "name": "Ahmed Ali" }, "customer": { "id": "9", "name": "Mariam Adel" },
   "plannedStartAt": "...", "startedAt": "...", "deliveredAt": null, "cancelledAt": null,
   "cancellationParty": null, "createdAt": "..." }
@@ -1323,11 +1358,11 @@ The drivers to show on the live map: everyone online, and everyone in a running 
   "id": "15", "name": "Ahmed Ali", "phone": "+201055512345", "online": true, "signal": "live",
   "location": { "lat": 30.0561, "lng": 31.3301, "updatedAt": "..." },
   "vehicle": { "vehicleTypeId": "2", "plateNumber": "ABC 123" },
-  "trip": { "id": "7", "status": "heading_to_pickup", "shipmentId": "12" }
+  "trip": { "id": "7", "status": "heading_to_pickup", "shipmentId": "12", "groupId": null }
 } ] }
 ```
 
-`signal` is `lost` when the driver sent nothing for `locationStaleSeconds`. `trip` is null when the driver is waiting for requests. Call it every 15 seconds.
+`signal` is `lost` when the driver sent nothing for `locationStaleSeconds`. `trip` is null when the driver is waiting for requests. In a grouped order `trip` is one of its trips and `groupId` is the order. Call it every 15 seconds.
 
 ## Too many tries
 

@@ -14,7 +14,7 @@ import { cleanCouponCode, checkCoupon } from '../lib/coupons.js';
 import {
   groupFields, stopFields, lockGroup, requireEditable, findStop, createGroup, updateGroup, addStop, updateStop,
   removeStop, reorderStops, readTiming, priceGroup, acceptGroupPrice, withdrawGroupPrice, requestGroup, cancelGroup,
-  loadGroup, GROUP_LIST_SQL, toGroupSummary,
+  lockGroupTrips, loadGroup, loadGroupTracking, GROUP_LIST_SQL, toGroupSummary,
 } from '../lib/groups.js';
 
 const router = Router();
@@ -39,6 +39,16 @@ async function reply(req, res, id, status = 200, recommended = undefined) {
 function change(req, work) {
   const id = cleanId(req.params.id);
   return withTransaction(actorOf(req), async (client) => work(client, await lockGroup(client, id, req.user.id)));
+}
+
+async function requireOwn(req, id) {
+  const { rows: [own] } = await query(
+    'SELECT 1 FROM shipment_groups WHERE id = $1 AND customer_id = $2',
+    [id, req.user.id],
+  );
+  if (!own) {
+    throw new AppError(404, 'NOT_FOUND', 'Grouped order not found');
+  }
 }
 
 router.get('/', async (req, res) => {
@@ -67,13 +77,7 @@ router.post('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   const id = cleanId(req.params.id);
-  const { rows: [own] } = await query(
-    'SELECT 1 FROM shipment_groups WHERE id = $1 AND customer_id = $2',
-    [id, req.user.id],
-  );
-  if (!own) {
-    throw new AppError(404, 'NOT_FOUND', 'Grouped order not found');
-  }
+  await requireOwn(req, id);
   await reply(req, res, id);
 });
 
@@ -199,12 +203,22 @@ router.post('/:id/request', async (req, res) => {
   await reply(req, res, req.params.id);
 });
 
+router.get('/:id/tracking', async (req, res) => {
+  const id = cleanId(req.params.id);
+  await requireOwn(req, id);
+  res.json({ tracking: await loadGroupTracking(id) });
+});
+
 router.post('/:id/cancel', async (req, res) => {
   const body = bodyOf(req);
   const reason = body.reason === undefined ? null : cleanOptionalText(body.reason, 'reason', 500);
   const id = cleanId(req.params.id);
+  await requireOwn(req, id);
   await withTransaction(actorOf(req, reason), async (client) => {
-    await cancelGroup(client, await lockGroup(client, id, req.user.id), reason);
+    const trips = await lockGroupTrips(client, id);
+    const locked = await lockGroup(client, id, req.user.id);
+    await cancelGroup(client, locked, reason, trips.length ? trips : await lockGroupTrips(client, id),
+      body.acceptFee);
   });
   await reply(req, res, id);
 });

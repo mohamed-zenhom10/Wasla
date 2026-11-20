@@ -30,8 +30,8 @@ router.get('/trips', async (req, res) => {
   const page = req.query.page === undefined ? 1 : cleanInteger(Number(req.query.page), 'page', 1, 100000);
 
   const { rows } = await query(
-    `SELECT t.id, t.status, t.shipment_id, t.fare_amount, t.planned_start_at, t.started_at, t.delivered_at,
-            t.cancelled_at, t.cancellation_party, t.created_at,
+    `SELECT t.id, t.status, t.shipment_id, t.group_id, t.fare_amount, t.planned_start_at, t.started_at,
+            t.delivered_at, t.cancelled_at, t.cancellation_party, t.created_at,
             d.id AS driver_id, d.full_name AS driver_name, c.id AS customer_id, c.full_name AS customer_name,
             count(*) OVER () AS total
      FROM trips t
@@ -50,6 +50,7 @@ router.get('/trips', async (req, res) => {
       id: row.id,
       status: row.status,
       shipmentId: row.shipment_id,
+      groupId: row.group_id,
       fareAmount: row.fare_amount,
       driver: { id: row.driver_id, name: row.driver_name },
       customer: { id: row.customer_id, name: row.customer_name },
@@ -71,13 +72,13 @@ router.get('/map', async (req, res) => {
     `SELECT dp.user_id, u.full_name, u.phone, dp.is_online, dp.location_updated_at,
             ST_X(dp.current_location::geometry) AS lng, ST_Y(dp.current_location::geometry) AS lat,
             dp.location_updated_at < now() - make_interval(secs => ps.location_stale_seconds) AS is_stale,
-            v.vehicle_type_id, v.plate_number, t.id AS trip_id, t.status AS trip_status, t.shipment_id
+            v.vehicle_type_id, v.plate_number, t.id AS trip_id, t.status AS trip_status, t.shipment_id, t.group_id
      FROM driver_profiles dp
      JOIN users u ON u.id = dp.user_id
      CROSS JOIN platform_settings ps
      LEFT JOIN vehicles v ON v.id = dp.active_vehicle_id
      LEFT JOIN LATERAL (
-       SELECT id, status, shipment_id FROM trips
+       SELECT id, status, shipment_id, group_id FROM trips
        WHERE driver_id = dp.user_id AND status = ANY($1::text[])
        ORDER BY id DESC
        LIMIT 1
@@ -95,7 +96,9 @@ router.get('/map', async (req, res) => {
       signal: row.is_stale ? 'lost' : 'live',
       location: { lat: Number(row.lat), lng: Number(row.lng), updatedAt: row.location_updated_at },
       vehicle: row.plate_number ? { vehicleTypeId: row.vehicle_type_id, plateNumber: row.plate_number } : null,
-      trip: row.trip_id ? { id: row.trip_id, status: row.trip_status, shipmentId: row.shipment_id } : null,
+      trip: row.trip_id ? {
+        id: row.trip_id, status: row.trip_status, shipmentId: row.shipment_id, groupId: row.group_id,
+      } : null,
     })),
   });
 });
