@@ -4,6 +4,7 @@ import { AppError } from '../errors.js';
 import { imageUrl } from './storage.js';
 import { estimateRoute, POINT_SQL } from './route.js';
 import { shipmentTrip } from './trips.js';
+import { minOrderError } from './coupons.js';
 import {
   invalid, cleanRef, cleanText, cleanOptionalText, cleanInteger, cleanBoolean, cleanChoice, cleanMeasure,
   cleanCoordinate, cleanPhone,
@@ -215,7 +216,7 @@ export async function updateShipment(client, id, columns) {
 const cents = (money) => Math.round(Number(money) * 100);
 const money = (value) => (value / 100).toFixed(2);
 
-export async function priceShipment(client, shipment) {
+export async function priceShipment(client, shipment, coupon = null) {
   const { rows: [photos] } = await client.query(
     'SELECT count(*)::int AS n FROM shipment_item_images WHERE shipment_id = $1',
     [shipment.id],
@@ -265,6 +266,7 @@ export async function priceShipment(client, shipment) {
     [shipment.id],
   );
 
+  let couponUsed = false;
   for (const type of types) {
     const distance = Math.round((cents(type.per_km_rate) * shipment.route_distance_m) / 1000);
     const transport = cents(type.base_fare) + distance;
@@ -277,14 +279,25 @@ export async function priceShipment(client, shipment) {
       helpersCount: shipment.helpers_count,
       helperFee: type.helper_fee,
     };
-    await client.query(
+    const { rows: [quote] } = await client.query(
       `INSERT INTO price_quotes (shipment_id, vehicle_type_id, pricing_details, pricing_source,
-         standard_amount, transport_amount, helpers_count, helper_fee, helpers_amount, amount, customer_amount,
-         shipment_version, expires_at)
-       VALUES ($1, $2, $3::jsonb, 'rules', $4, $4, $5, $6, $7, $8, $8, $9, now() + make_interval(mins => $10))`,
+         standard_amount, transport_amount, helpers_count, helper_fee, helpers_amount, amount,
+         coupon_id, coupon_discount_amount, customer_amount, shipment_version, expires_at)
+       SELECT $1, $2, $3::jsonb, 'rules', $4, $4, $5, $6, $7, x.amount,
+              x.coupon_id, x.discount, x.amount - x.discount, $9, now() + make_interval(mins => $10)
+       FROM (
+         SELECT a.amount, c.id AS coupon_id, COALESCE(coupon_discount(c.id, a.amount), 0) AS discount
+         FROM (SELECT $8::numeric AS amount) a
+         LEFT JOIN coupons c ON c.id = $11 AND a.amount >= c.min_order_amount
+       ) x
+       RETURNING coupon_id`,
       [shipment.id, type.id, JSON.stringify(details), money(transport), shipment.helpers_count, type.helper_fee,
-        money(helpers), money(transport + helpers), version, QUOTE_MINUTES],
+        money(helpers), money(transport + helpers), version, QUOTE_MINUTES, coupon ? coupon.id : null],
     );
+    couponUsed = couponUsed || quote.coupon_id !== null;
+  }
+  if (coupon && !couponUsed) {
+    throw minOrderError(coupon);
   }
   return types[0].id;
 }
@@ -301,6 +314,7 @@ function toQuote(row, recommendedId) {
     helpersAmount: row.helpers_amount,
     returnDiscountAmount: row.return_discount_amount,
     groupDiscountAmount: row.group_discount_amount,
+    couponCode: row.coupon_code || null,
     couponDiscountAmount: row.coupon_discount_amount,
     amount: row.amount,
     customerAmount: row.customer_amount,
@@ -357,9 +371,10 @@ export async function loadShipment(id, baseUrl, recommendedId) {
     shipmentTrip(id),
     query('SELECT id, storage_key, uploaded_at FROM shipment_item_images WHERE shipment_id = $1 ORDER BY id', [id]),
     query(
-      `SELECT * FROM price_quotes WHERE shipment_id = $1
-         AND (status = 'accepted' OR (status = 'offered' AND expires_at > now() AND shipment_version = $2))
-       ORDER BY amount, id`,
+      `SELECT q.*, c.code AS coupon_code FROM price_quotes q LEFT JOIN coupons c ON c.id = q.coupon_id
+       WHERE q.shipment_id = $1
+         AND (q.status = 'accepted' OR (q.status = 'offered' AND q.expires_at > now() AND q.shipment_version = $2))
+       ORDER BY q.amount, q.id`,
       [id, row.details_version],
     ),
     query(

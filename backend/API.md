@@ -601,7 +601,7 @@ Every request below returns `{ "shipment": { ... } }`:
     "quotes": [
       { "id": "30", "vehicleTypeId": "2", "status": "offered", "recommended": true,
         "transportAmount": "580.18", "helpersCount": 1, "helperFee": "50.00", "helpersAmount": "50.00",
-        "returnDiscountAmount": "0.00", "groupDiscountAmount": "0.00", "couponDiscountAmount": "0.00",
+        "returnDiscountAmount": "0.00", "groupDiscountAmount": "0.00", "couponCode": null, "couponDiscountAmount": "0.00",
         "amount": "630.18", "customerAmount": "630.18", "pricingSource": "rules", "pricingDetails": { },
         "expiresAt": "...", "acceptedAt": null }
     ],
@@ -698,17 +698,25 @@ Errors: `TOO_MANY_PHOTOS`, `INVALID_IMAGE`, `UNSUPPORTED_IMAGE`, `TOO_LARGE`, `S
 
 ### POST /shipments/:id/quotes
 
-No body. Makes one price for every vehicle type that can carry the cargo. The smallest one has `recommended: true`. A price is valid for 15 minutes, and asking again replaces the old prices. Returns `201`.
+```json
+{ "couponCode": "WASLA50" }
+```
+
+The body is optional. Makes one price for every vehicle type that can carry the cargo. The smallest one has `recommended: true`. A price is valid for 15 minutes, and asking again replaces the old prices. Returns `201`.
 
 For a `now` pickup the pickup time starts again from now.
 
-Errors: `PHOTO_REQUIRED` (add a photo first), `NO_VEHICLE_FITS`, `SCHEDULE_TOO_SOON` (the scheduled time is too close now, change `pickupAt`), `PRICE_ACCEPTED`
+With `couponCode` (small or capital letters), each price has `couponCode`, `couponDiscountAmount` and `customerAmount` (`amount` minus the discount, what the customer pays). A price below the coupon's minimum order gets no discount. To change or remove the coupon, ask for prices again. One coupon per shipment.
+
+Errors: `PHOTO_REQUIRED` (add a photo first), `NO_VEHICLE_FITS`, `SCHEDULE_TOO_SOON` (the scheduled time is too close now, change `pickupAt`), `PRICE_ACCEPTED`, and for the coupon (all with `field: "couponCode"`): `COUPON_INVALID`, `COUPON_NOT_STARTED` (with `startsAt`), `COUPON_EXPIRED`, `COUPON_USED_UP`, `COUPON_ALREADY_USED`, `COUPON_MIN_ORDER` (with `minOrderAmount`, no price is high enough)
 
 ### POST /shipments/:id/quotes/:quoteId/accept
 
 No body. The other prices become `rejected`, and the shipment cannot change until the price is withdrawn.
 
-Errors: `QUOTE_EXPIRED`, `QUOTE_OUTDATED` (the shipment changed after this price), `QUOTE_NOT_AVAILABLE`, `PRICE_ACCEPTED`, `NOT_FOUND`
+A coupon on the price is used here. It comes back if the price is withdrawn or the shipment is cancelled. The coupon is checked again, so the coupon errors above can come here too.
+
+Errors: `QUOTE_EXPIRED`, `QUOTE_OUTDATED` (the shipment changed after this price), `QUOTE_NOT_AVAILABLE`, `PRICE_ACCEPTED`, `NOT_FOUND`, the coupon errors
 
 ### POST /shipments/:id/withdraw-price
 
@@ -1008,6 +1016,31 @@ Same as driver payouts, for the requests of `POST /me/wallet/withdrawals`: `GET 
 - `PUT /admin/drivers/:id/debt-limit`: `{ "debtLimit": "3000.00" }` gives one driver his own limit, `null` puts him back on `defaultDebtLimit`. Returns the driver wallet.
 
 Errors: `INVALID_INPUT`, `NOT_FOUND`
+
+### Coupons
+
+- `GET /admin/coupons?state=all&search=&page=1`: 20 per page, newest first. `state` is `active`, `scheduled` (not started), `expired`, `used_up`, `inactive` or `all`. `search` is part of the code. Returns `coupons`, `page`, `pageSize` and `total`.
+- `POST /admin/coupons`: returns `201` with `{ "coupon": { ... } }`.
+
+```json
+{
+  "code": "WASLA50", "discountType": "percent", "discountValue": "10", "maxDiscount": "50.00",
+  "minOrderAmount": "300.00", "startsAt": "2026-12-01T00:00:00+02:00", "endsAt": "2026-12-31T23:59:00+02:00",
+  "maxTotalUses": 100, "maxUsesPerCustomer": 1, "isActive": true
+}
+```
+
+  - `code`: 3 to 30 letters, numbers, `-` or `_`. It is saved in capital letters and is the same in small letters.
+  - `discountType`: `percent` (`discountValue` up to 100, and `maxDiscount` is the most it takes off) or `fixed` (`discountValue` is the amount, no `maxDiscount`).
+  - Needed: `code`, `discountType`, `discountValue`, `endsAt`. `startsAt` is now if not sent, `minOrderAmount` is 0, `maxTotalUses` null is no limit, `maxUsesPerCustomer` is 1.
+  - The discount is never the whole price: the customer pays at least 0.01.
+  - The platform pays the discount: the driver earns on the price before it. On a cash trip the driver gets it back as `coupon_compensation` in his wallet.
+- `GET /admin/coupons/:id`: with `lastUses` (the last 20: `customer`, `shipmentId`, `discountAmount`, `usedAt`, `cancelledAt`).
+- `PATCH /admin/coupons/:id`: any of the fields above. After the first use, only `startsAt`, `endsAt`, `maxTotalUses`, `maxUsesPerCustomer` and `isActive` can change. There is no delete, set `isActive` to false.
+
+Each coupon has the fields above plus `id`, `state`, `usedCount`, `totalDiscount` and `createdAt`.
+
+Errors: `INVALID_INPUT`, `CODE_TAKEN`, `COUPON_IN_USE` (with `field`), `NOT_FOUND`
 
 ### Terms and privacy
 

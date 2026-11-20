@@ -13,6 +13,7 @@ import settlementsRouter from './settlements.js';
 import walletsRouter from './wallets.js';
 import payoutsRouter from './payouts.js';
 import withdrawalsRouter from './withdrawals.js';
+import couponsRouter from './coupons.js';
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use('/topups', topupsRouter);
 router.use('/settlements', settlementsRouter);
 router.use('/payouts', payoutsRouter);
 router.use('/withdrawals', withdrawalsRouter);
+router.use('/coupons', couponsRouter);
 
 export default router;

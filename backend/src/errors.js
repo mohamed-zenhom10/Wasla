@@ -23,6 +23,10 @@ const CONSTRAINT_ERRORS = {
   ex_trips_vehicle_executing: [409, 'ANOTHER_TRIP_RUNNING', 'Finish your current trip first'],
   uq_topup_verified_reference: [409, 'TRANSFER_USED', 'This transfer was already used for another payment'],
   uq_settlement_verified_reference: [409, 'TRANSFER_USED', 'This transfer was already used for another payment'],
+  uq_coupons_code_ci: [409, 'CODE_TAKEN', 'This coupon code already exists', { field: 'code' }],
+  ck_coupon_dates: [400, 'INVALID_INPUT', 'endsAt must be after startsAt', { field: 'endsAt' }],
+  ck_coupon_percent: [400, 'INVALID_INPUT', 'A percent discount must be at most 100', { field: 'discountValue' }],
+  ck_coupon_max_discount: [400, 'INVALID_INPUT', 'maxDiscount is only for percent coupons', { field: 'maxDiscount' }],
 };
 
 function duplicateField(detail) {

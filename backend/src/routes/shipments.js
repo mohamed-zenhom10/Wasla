@@ -12,6 +12,7 @@ import {
   requireDraft, toShipmentSummary, SUMMARY_SQL, STATUS_FILTERS,
 } from '../lib/shipments.js';
 import { BEFORE_LOADING, loadTracking, lockLiveTrip } from '../lib/trips.js';
+import { cleanCouponCode, checkCoupon, minOrderError } from '../lib/coupons.js';
 
 const router = Router();
 const PAGE_SIZE = 20;
@@ -154,13 +155,17 @@ router.delete('/:id/photos/:photoId', async (req, res) => {
 
 router.post('/:id/quotes', async (req, res) => {
   const id = cleanId(req.params.id);
+  const body = bodyOf(req);
+  const code = body.couponCode === undefined || body.couponCode === null || body.couponCode === ''
+    ? null : cleanCouponCode(body.couponCode, 'couponCode');
   const recommended = await withTransaction(actorOf(req), async (client) => {
     const row = await lockShipment(client, id, req.user.id);
     requireDraft(row);
     if (await acceptedQuote(client, id)) {
       throw priceLocked();
     }
-    return priceShipment(client, row);
+    const coupon = code ? await checkCoupon(client, 'lower(code) = lower($1)', code, req.user.id) : null;
+    return priceShipment(client, row, coupon);
   });
   res.status(201).json({ shipment: await loadShipment(id, baseUrl(req), recommended) });
 });
@@ -175,7 +180,7 @@ router.post('/:id/quotes/:quoteId/accept', async (req, res) => {
       throw new AppError(409, 'PRICE_ACCEPTED', 'A price is already accepted for this shipment');
     }
     const { rows: [quote] } = await client.query(
-      `SELECT status, shipment_version, expires_at < now() AS expired
+      `SELECT status, shipment_version, coupon_id, amount, expires_at < now() AS expired
        FROM price_quotes WHERE id = $1 AND shipment_id = $2`,
       [quoteId, id],
     );
@@ -190,6 +195,15 @@ router.post('/:id/quotes/:quoteId/accept', async (req, res) => {
     }
     if (quote.shipment_version !== row.details_version) {
       throw new AppError(409, 'QUOTE_OUTDATED', 'The shipment changed after this price, ask for a new price');
+    }
+    if (quote.coupon_id) {
+      const coupon = await checkCoupon(client, 'id = $1', quote.coupon_id, req.user.id);
+      const { rows: [order] } = await client.query('SELECT $1::numeric >= $2::numeric AS enough', [
+        quote.amount, coupon.min_order_amount,
+      ]);
+      if (!order.enough) {
+        throw minOrderError(coupon);
+      }
     }
     await client.query("UPDATE price_quotes SET status = 'accepted' WHERE id = $1", [quoteId]);
     await client.query(
