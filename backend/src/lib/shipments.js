@@ -11,10 +11,10 @@ import {
 } from './validate.js';
 
 const QUOTE_MINUTES = 15;
-const WINDOW_MINUTES = 60;
+export const WINDOW_MINUTES = 60;
 const MAX_SCHEDULE_DAYS = 30;
 
-function cleanPlace(value, field) {
+export function cleanPlace(value, field) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw invalid(field, `${field} must have address, lat and lng`);
   }
@@ -26,7 +26,7 @@ function cleanPlace(value, field) {
   };
 }
 
-function cleanTime(value, field) {
+export function cleanTime(value, field) {
   const time = typeof value === 'string' ? new Date(value) : null;
   if (!time || Number.isNaN(time.getTime()) || !/^\d{4}-\d{2}-\d{2}T/.test(value)) {
     throw invalid(field, `${field} must be a date and time like 2026-11-20T09:30:00+02:00`);
@@ -87,6 +87,24 @@ export function stateOf(row) {
   };
 }
 
+export async function scheduledStart(client, pickupAt) {
+  if (!pickupAt) {
+    throw invalid('pickupAt', 'pickupAt is required for a scheduled pickup');
+  }
+  const { rows: [settings] } = await client.query(
+    'SELECT min_schedule_lead_minutes FROM platform_settings WHERE id = 1',
+  );
+  const now = Date.now();
+  const start = new Date(pickupAt);
+  if (start.getTime() < now + settings.min_schedule_lead_minutes * 60000) {
+    throw invalid('pickupAt', `Schedule the pickup at least ${settings.min_schedule_lead_minutes} minutes from now`);
+  }
+  if (start.getTime() > now + MAX_SCHEDULE_DAYS * 86400000) {
+    throw invalid('pickupAt', `A scheduled pickup can be at most ${MAX_SCHEDULE_DAYS} days from now`);
+  }
+  return start;
+}
+
 export async function buildColumns(client, state, changed) {
   const { rows: [category] } = await client.query(
     'SELECT is_active FROM cargo_categories WHERE id = $1',
@@ -114,22 +132,9 @@ export async function buildColumns(client, state, changed) {
     }
   }
 
-  const now = Date.now();
-  let start = new Date(now);
+  let start = new Date();
   if (state.pickupType === 'scheduled') {
-    if (!state.pickupAt) {
-      throw invalid('pickupAt', 'pickupAt is required for a scheduled pickup');
-    }
-    const { rows: [settings] } = await client.query(
-      'SELECT min_schedule_lead_minutes FROM platform_settings WHERE id = 1',
-    );
-    start = new Date(state.pickupAt);
-    if (start.getTime() < now + settings.min_schedule_lead_minutes * 60000) {
-      throw invalid('pickupAt', `Schedule the pickup at least ${settings.min_schedule_lead_minutes} minutes from now`);
-    }
-    if (start.getTime() > now + MAX_SCHEDULE_DAYS * 86400000) {
-      throw invalid('pickupAt', `A scheduled pickup can be at most ${MAX_SCHEDULE_DAYS} days from now`);
-    }
+    start = await scheduledStart(client, state.pickupAt);
   } else if (changed.includes('pickupAt') && state.pickupAt) {
     throw invalid('pickupAt', 'pickupAt is only for a scheduled pickup');
   }
@@ -213,8 +218,60 @@ export async function updateShipment(client, id, columns) {
   );
 }
 
-const cents = (money) => Math.round(Number(money) * 100);
+export const cents = (money) => Math.round(Number(money) * 100);
 const money = (value) => (value / 100).toFixed(2);
+
+export async function fittingTypes(client, weight, volume) {
+  const { rows } = await client.query(
+    `SELECT * FROM vehicle_types
+     WHERE is_active
+       AND ($1::numeric IS NULL OR max_payload_kg >= $1)
+       AND ($2::numeric IS NULL OR cargo_volume_m3 >= $2)
+     ORDER BY max_payload_kg, id`,
+    [weight, volume],
+  );
+  if (rows.length === 0) {
+    throw new AppError(400, 'NO_VEHICLE_FITS', 'No vehicle can carry this cargo, check the weight and size');
+  }
+  return rows;
+}
+
+export function quoteParts(type, shipment) {
+  const distance = Math.round((cents(type.per_km_rate) * shipment.route_distance_m) / 1000);
+  return {
+    transport: cents(type.base_fare) + distance,
+    helpers: shipment.helpers_count * cents(type.helper_fee),
+    details: {
+      method: 'rules',
+      distanceKm: Number((shipment.route_distance_m / 1000).toFixed(1)),
+      baseFare: type.base_fare,
+      perKmRate: type.per_km_rate,
+      helpersCount: shipment.helpers_count,
+      helperFee: type.helper_fee,
+    },
+  };
+}
+
+export async function insertQuote(client, quote) {
+  const { rows: [row] } = await client.query(
+    `INSERT INTO price_quotes (shipment_id, vehicle_type_id, pricing_details, pricing_source,
+       standard_amount, transport_amount, helpers_count, helper_fee, helpers_amount, group_discount_amount, amount,
+       coupon_id, coupon_discount_amount, customer_amount, shipment_version, expires_at)
+     SELECT $1, $2, $3::jsonb, 'rules', $4, $4, $5, $6, $7, $8, x.amount,
+            x.coupon_id, x.discount, x.amount - x.discount, $10, now() + make_interval(mins => $11)
+     FROM (
+       SELECT a.amount, c.id AS coupon_id, COALESCE(coupon_discount(c.id, a.amount), 0) AS discount
+       FROM (SELECT $9::numeric AS amount) a
+       LEFT JOIN coupons c ON c.id = $12 AND a.amount >= c.min_order_amount
+     ) x
+     RETURNING coupon_id`,
+    [quote.shipmentId, quote.type.id, JSON.stringify(quote.details), money(quote.transport),
+      quote.helpersCount, quote.type.helper_fee, money(quote.helpers), money(quote.groupDiscount || 0),
+      money(quote.transport + quote.helpers - (quote.groupDiscount || 0)), quote.version, QUOTE_MINUTES,
+      quote.couponId || null],
+  );
+  return row.coupon_id !== null;
+}
 
 export async function priceShipment(client, shipment, coupon = null) {
   const { rows: [photos] } = await client.query(
@@ -249,17 +306,7 @@ export async function priceShipment(client, shipment, coupon = null) {
     'SELECT approx_volume_m3 FROM cargo_size_options WHERE id = $1',
     [shipment.size_option_id],
   );
-  const { rows: types } = await client.query(
-    `SELECT * FROM vehicle_types
-     WHERE is_active
-       AND ($1::numeric IS NULL OR max_payload_kg >= $1)
-       AND ($2::numeric IS NULL OR cargo_volume_m3 >= $2)
-     ORDER BY max_payload_kg, id`,
-    [shipment.weight_kg, size ? size.approx_volume_m3 : null],
-  );
-  if (types.length === 0) {
-    throw new AppError(400, 'NO_VEHICLE_FITS', 'No vehicle can carry this cargo, check the weight and size');
-  }
+  const types = await fittingTypes(client, shipment.weight_kg, size ? size.approx_volume_m3 : null);
 
   await client.query(
     "UPDATE price_quotes SET status = 'expired' WHERE shipment_id = $1 AND status = 'offered'",
@@ -268,33 +315,16 @@ export async function priceShipment(client, shipment, coupon = null) {
 
   let couponUsed = false;
   for (const type of types) {
-    const distance = Math.round((cents(type.per_km_rate) * shipment.route_distance_m) / 1000);
-    const transport = cents(type.base_fare) + distance;
-    const helpers = shipment.helpers_count * cents(type.helper_fee);
-    const details = {
-      method: 'rules',
-      distanceKm: Number((shipment.route_distance_m / 1000).toFixed(1)),
-      baseFare: type.base_fare,
-      perKmRate: type.per_km_rate,
+    const parts = quoteParts(type, shipment);
+    const used = await insertQuote(client, {
+      ...parts,
+      shipmentId: shipment.id,
+      type,
       helpersCount: shipment.helpers_count,
-      helperFee: type.helper_fee,
-    };
-    const { rows: [quote] } = await client.query(
-      `INSERT INTO price_quotes (shipment_id, vehicle_type_id, pricing_details, pricing_source,
-         standard_amount, transport_amount, helpers_count, helper_fee, helpers_amount, amount,
-         coupon_id, coupon_discount_amount, customer_amount, shipment_version, expires_at)
-       SELECT $1, $2, $3::jsonb, 'rules', $4, $4, $5, $6, $7, x.amount,
-              x.coupon_id, x.discount, x.amount - x.discount, $9, now() + make_interval(mins => $10)
-       FROM (
-         SELECT a.amount, c.id AS coupon_id, COALESCE(coupon_discount(c.id, a.amount), 0) AS discount
-         FROM (SELECT $8::numeric AS amount) a
-         LEFT JOIN coupons c ON c.id = $11 AND a.amount >= c.min_order_amount
-       ) x
-       RETURNING coupon_id`,
-      [shipment.id, type.id, JSON.stringify(details), money(transport), shipment.helpers_count, type.helper_fee,
-        money(helpers), money(transport + helpers), version, QUOTE_MINUTES, coupon ? coupon.id : null],
-    );
-    couponUsed = couponUsed || quote.coupon_id !== null;
+      version,
+      couponId: coupon ? coupon.id : null,
+    });
+    couponUsed = couponUsed || used;
   }
   if (coupon && !couponUsed) {
     throw minOrderError(coupon);
@@ -302,7 +332,7 @@ export async function priceShipment(client, shipment, coupon = null) {
   return types[0].id;
 }
 
-function toQuote(row, recommendedId) {
+export function toQuote(row, recommendedId) {
   return {
     id: row.id,
     vehicleTypeId: row.vehicle_type_id,
@@ -325,7 +355,7 @@ function toQuote(row, recommendedId) {
   };
 }
 
-function toPlace(row, prefix) {
+export function toPlace(row, prefix) {
   return {
     address: row[`${prefix}_address`],
     lat: Number(row[`${prefix}_lat`]),
@@ -338,6 +368,7 @@ function toPlace(row, prefix) {
 export function toShipmentSummary(row) {
   return {
     id: row.id,
+    groupId: row.group_id,
     status: row.status,
     cargoCategoryId: row.cargo_category_id,
     cargoDescription: row.cargo_description,
@@ -398,6 +429,7 @@ export async function loadShipment(id, baseUrl, recommendedId) {
   const accepted = quotes.rows.find((q) => q.status === 'accepted');
   return {
     id: row.id,
+    groupId: row.group_id,
     status: row.status,
     cargoCategoryId: row.cargo_category_id,
     sizeOptionId: row.size_option_id,

@@ -99,7 +99,7 @@ export async function cancelUnmatched(client) {
   await client.query(
     `UPDATE shipments s SET status = 'cancelled', cancellation_reason = 'no_driver_found'
      FROM platform_settings ps
-     WHERE s.status = 'searching_driver' AND s.group_id IS NULL
+     WHERE s.status = 'searching_driver'
        AND COALESCE(s.search_started_at, GREATEST(
              (SELECT max(h.created_at) FROM shipment_status_history h
               WHERE h.shipment_id = s.id AND h.to_status = 'searching_driver'),

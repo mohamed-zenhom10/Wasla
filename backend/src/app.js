@@ -11,6 +11,7 @@ import adminRouter from './routes/admin/index.js';
 import driverRouter from './routes/driver.js';
 import filesRouter from './routes/files.js';
 import shipmentsRouter from './routes/shipments.js';
+import shipmentGroupsRouter from './routes/shipmentGroups.js';
 import walletRouter from './routes/wallet.js';
 
 const app = express();
@@ -32,6 +33,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/driver', driverRouter);
 app.use('/api/files', filesRouter);
 app.use('/api/shipments', shipmentsRouter);
+app.use('/api/shipment-groups', shipmentGroupsRouter);
 
 app.use((req, res, next) => {
   next(new AppError(404, 'NOT_FOUND', 'Route not found'));

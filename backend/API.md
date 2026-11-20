@@ -615,6 +615,7 @@ Every request below returns `{ "shipment": { ... } }`:
 - `routeDistanceM` and `routeDurationS` are worked out by the server from the two points. Do not send them.
 - `deliveryCode` is shown to the customer only. The recipient tells it to the driver at the drop-off.
 - `quotes` has only the prices that can still be accepted. `customerAmount` is what the customer pays.
+- `groupId` is null, or the grouped order this shipment is a drop-off of. A drop-off can be read here (`GET /shipments/:id` and `/tracking`), but it changes only from its order: the other requests return `IN_GROUP` (with `groupId`).
 - `url` opens the photo for 1 hour.
 - `trip` is null until a driver accepts. After that:
 
@@ -634,6 +635,8 @@ Every request below returns `{ "shipment": { ... } }`:
 ### GET /shipments?status=active&page=1
 
 20 per page, newest first. `status` is `active` (searching, assigned or on the way), `draft`, `searching_driver`, `driver_assigned`, `in_progress`, `delivered` or `cancelled`. Returns `shipments` (short: id, status, addresses, `pickupWindowStart`, `vehicleTypeId` and `customerAmount` of the accepted price), `page` and `hasMore`.
+
+The drop-offs of a grouped order are not in this list. They are in `GET /shipment-groups`.
 
 ### POST /shipments
 
@@ -744,6 +747,158 @@ Errors: `PRICE_NOT_ACCEPTED`, `PRICE_TOO_OLD` (the pickup time passed, withdraw 
 - After loading the customer cannot cancel.
 
 Errors: `CANCEL_FEE` (with `fee`), `CARGO_LOADED`, `WRONG_STATUS`
+
+## Grouped orders
+
+One pickup, many drop-offs, one vehicle. For example a shop sends 3 orders to 3 customers from its warehouse. Everything under `/shipment-groups` needs a customer account.
+
+The steps: make the order (the pickup and the helpers), add the drop-offs and their photos, ask for prices, accept one, then send the request. Each drop-off is a shipment with its own cargo, recipient, payment and delivery code.
+
+Every request below returns `{ "group": { ... } }`:
+
+```json
+{
+  "group": {
+    "id": "4", "status": "draft",
+    "pickup": { "address": "...", "lat": 30.0444, "lng": 31.2357, "notes": "Gate 2", "zoneId": null },
+    "helpersCount": 1,
+    "pickupType": "now", "pickupWindowStart": "...", "pickupWindowEnd": "...",
+    "createdAt": "...", "cancelledAt": null, "cancellationParty": null, "cancellationReason": null,
+    "stops": [
+      { "id": "41", "order": 1, "status": "draft",
+        "cargoCategoryId": "1", "sizeOptionId": "3", "cargoDescription": "2 boxes", "itemCount": 2, "isFragile": false,
+        "weightKg": 50, "dropoff": { "address": "...", "lat": 30.0131, "lng": 31.2089, "notes": null, "zoneId": null },
+        "routeDistanceM": 5200, "routeDurationS": 749, "paymentMethod": "cash", "farePaidBy": "recipient",
+        "recipient": { "name": "Mona", "phone": "+201012345678" }, "deliveryCode": "4821",
+        "photos": [ { "id": "9", "url": "https://...", "uploadedAt": "..." } ], "trip": null }
+    ],
+    "quotes": [
+      { "vehicleTypeId": "2", "status": "offered", "recommended": true,
+        "transportAmount": "800.00", "helpersAmount": "100.00", "groupDiscountAmount": "45.00",
+        "couponCode": null, "couponDiscountAmount": "0.00", "amount": "855.00", "customerAmount": "855.00",
+        "expiresAt": "...", "acceptedAt": null,
+        "stops": [
+          { "stopId": "41", "quoteId": "77", "transportAmount": "420.00", "helpersCount": 1, "helperFee": "50.00",
+            "helpersAmount": "50.00", "groupDiscountAmount": "23.50", "couponDiscountAmount": "0.00",
+            "amount": "446.50", "customerAmount": "446.50", "pricingDetails": { } }
+        ] }
+    ],
+    "acceptedPrice": null
+  }
+}
+```
+
+- `status` is the status of the whole order: `draft`, `searching_driver`, `driver_assigned`, `in_progress`, `delivered` or `cancelled`. Each drop-off also has its own `status`.
+- `stops` are in the delivery order. `order` is 1, 2, 3... The driver sees it as a suggestion and can deliver in another order.
+- Every drop-off takes the pickup, the helpers and the pickup time of the order.
+- `quotes` has one choice per vehicle type. The totals are for the whole order, and `stops` has the price of each drop-off. `customerAmount` of a drop-off is what its payer pays.
+- `acceptedPrice` is the accepted choice, in the same shape, or null.
+- `deliveryCode` is per drop-off. Share each one with its recipient only.
+- A cancelled order shows the drop-offs that were cancelled with it.
+
+### GET /shipment-groups?status=active&page=1
+
+20 per page, newest first. `status` is the same as `GET /shipments`. Returns `groups` (short: `id`, `status`, `pickupAddress`, `stopsCount`, `pickupWindowStart`, `vehicleTypeId` and `customerAmount` of the accepted price), `page` and `hasMore`.
+
+### POST /shipment-groups
+
+```json
+{ "pickup": { "address": "...", "lat": 30.0444, "lng": 31.2357, "notes": "Gate 2" }, "helpersCount": 1 }
+```
+
+`pickup` is needed. `helpersCount` is 0 to 20 (default 0). The same helpers load and unload at every drop-off, and each drop-off pays for them. Returns `201` with no drop-offs yet.
+
+### GET /shipment-groups/:id
+
+### PATCH /shipment-groups/:id
+
+`pickup` and/or `helpersCount`. Only a `draft`, and not after a price is accepted. The drop-offs follow.
+
+Errors: `INVALID_INPUT`, `SAME_PLACE` (with `stopId`, the pickup is too close to that drop-off), `WRONG_STATUS`, `PRICE_ACCEPTED`
+
+### POST /shipment-groups/:id/stops
+
+```json
+{
+  "cargoCategoryId": "1", "sizeOptionId": "3", "cargoDescription": "2 boxes", "itemCount": 2, "isFragile": false,
+  "weightKg": 50, "dropoff": { "address": "...", "lat": 30.0131, "lng": 31.2089 },
+  "paymentMethod": "cash", "farePaidBy": "recipient", "recipientName": "Mona", "recipientPhone": "+201012345678"
+}
+```
+
+Adds a drop-off at the end. The same fields as `POST /shipments` without `pickup`, `helpersCount`, `pickupType`, `pickupAt` and `requestedVehicleTypeId` (they come from the order). `recipientName` and `recipientPhone` are needed here. At most `maxGroupStops` (5) drop-offs. Adding one removes the prices, ask again. Returns `201`.
+
+Errors: `INVALID_INPUT`, `SAME_PLACE`, `TOO_MANY_STOPS` (with `max`), `WRONG_STATUS`, `PRICE_ACCEPTED`
+
+### PATCH /shipment-groups/:id/stops/:stopId
+
+The same fields, only what changes.
+
+### DELETE /shipment-groups/:id/stops/:stopId
+
+Removes a drop-off. The last one cannot be removed, cancel the order instead.
+
+Errors: `LAST_STOP`, `WRONG_STATUS`, `PRICE_ACCEPTED`, `NOT_FOUND`
+
+### PUT /shipment-groups/:id/order
+
+```json
+{ "stopIds": ["43", "41", "42"] }
+```
+
+The new delivery order, with every drop-off once. Works while the order is a `draft`, even after a price is accepted (the price does not change).
+
+Errors: `INVALID_INPUT`, `WRONG_STATUS`
+
+### PUT /shipment-groups/:id/stops/:stopId/photos
+
+The same as `PUT /shipments/:id/photos`, for one drop-off. `DELETE /shipment-groups/:id/stops/:stopId/photos/:photoId` removes one.
+
+### POST /shipment-groups/:id/quotes
+
+```json
+{ "pickupType": "scheduled", "pickupAt": "2026-11-22T09:30:00+02:00", "couponCode": "WASLA50" }
+```
+
+`pickupType` is needed (`now` or `scheduled`, the same rules as a shipment), and it is set on every drop-off. `couponCode` is optional. Returns `201`.
+
+- The order needs at least 2 drop-offs, each with a photo.
+- Each drop-off is priced alone, from the pickup to its drop-off, like a shipment. Then the group discount (`groupDiscountPct` in settings, 5%) comes off each one.
+- Only vehicles that can carry all the drop-offs together are offered (their weights and sizes are added up).
+- One coupon per order: it goes on one drop-off, the most expensive one that reaches the coupon's minimum order.
+- A price is valid for 15 minutes. Asking again replaces the old prices.
+
+Errors: `INVALID_INPUT`, `GROUP_TOO_SMALL` (with `min`), `PHOTO_REQUIRED` (with `stopId`), `NO_VEHICLE_FITS`, `WRONG_STATUS`, `PRICE_ACCEPTED`, the coupon errors of `POST /shipments/:id/quotes`
+
+### POST /shipment-groups/:id/quotes/accept
+
+```json
+{ "vehicleTypeId": "2" }
+```
+
+Accepts that choice for every drop-off at once. After that the order and its drop-offs cannot change until the price is withdrawn.
+
+Errors: `QUOTE_EXPIRED`, `QUOTE_OUTDATED` (the order changed after the price), `PRICE_ACCEPTED`, `NOT_FOUND`, the coupon errors
+
+### POST /shipment-groups/:id/withdraw-price
+
+No body. Errors: `PRICE_NOT_ACCEPTED`, `WRONG_STATUS`
+
+### POST /shipment-groups/:id/request
+
+No body. Sends the whole order to the drivers, every drop-off becomes `searching_driver`. The drop-offs paid by `wallet` are paid together here.
+
+Errors: `PRICE_NOT_ACCEPTED`, `GROUP_TOO_SMALL`, `PRICE_TOO_OLD`, `POLICIES_NOT_ACCEPTED`, `WALLET_NEGATIVE`, `WALLET_TOO_LOW` (`needed` is the total of the wallet drop-offs), `WRONG_STATUS`
+
+### POST /shipment-groups/:id/cancel
+
+```json
+{ "reason": "Changed my mind" }
+```
+
+Cancels every drop-off, for free, while the order is a `draft` or `searching_driver`. The wallet money and the coupon come back. A single drop-off cannot be cancelled after the request.
+
+Errors: `WRONG_STATUS`
 
 ## Wallet
 

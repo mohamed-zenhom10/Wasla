@@ -41,6 +41,13 @@ async function acceptedQuote(client, id) {
   return quote;
 }
 
+function requireSingle(row) {
+  if (row.group_id) {
+    throw new AppError(409, 'IN_GROUP', 'This shipment is part of a grouped order, change it from the order',
+      { groupId: row.group_id });
+  }
+}
+
 function priceLocked() {
   return new AppError(409, 'PRICE_ACCEPTED', 'The price was accepted, withdraw it first to change the shipment');
 }
@@ -51,7 +58,7 @@ router.get('/', async (req, res) => {
   const page = req.query.page === undefined ? 1 : cleanInteger(Number(req.query.page), 'page', 1, 100000);
   const { rows } = await query(
     `${SUMMARY_SQL}
-     WHERE s.customer_id = $1 AND ($2::text IS NULL OR s.status = ANY(string_to_array($2, ',')))
+     WHERE s.customer_id = $1 AND s.group_id IS NULL AND ($2::text IS NULL OR s.status = ANY(string_to_array($2, ',')))
      ORDER BY s.created_at DESC, s.id DESC
      LIMIT ${PAGE_SIZE + 1} OFFSET $3`,
     [req.user.id, status ? STATUS_FILTERS[status].join(',') : null, (page - 1) * PAGE_SIZE],
@@ -97,6 +104,7 @@ router.patch('/:id', async (req, res) => {
   const changes = readFields(body, shipmentFields, 'update');
   await withTransaction(actorOf(req), async (client) => {
     const row = await lockShipment(client, id, req.user.id);
+    requireSingle(row);
     requireDraft(row);
     if (await acceptedQuote(client, id)) {
       throw priceLocked();
@@ -112,6 +120,7 @@ router.put('/:id/photos', imageBody, async (req, res) => {
   const image = readImage(req);
   const check = async (client) => {
     const row = await lockShipment(client, id, req.user.id);
+    requireSingle(row);
     requireDraft(row);
     if (await acceptedQuote(client, id)) {
       throw priceLocked();
@@ -138,6 +147,7 @@ router.delete('/:id/photos/:photoId', async (req, res) => {
   const photoId = cleanId(req.params.photoId);
   await withTransaction(actorOf(req), async (client) => {
     const row = await lockShipment(client, id, req.user.id);
+    requireSingle(row);
     requireDraft(row);
     if (await acceptedQuote(client, id)) {
       throw priceLocked();
@@ -160,6 +170,7 @@ router.post('/:id/quotes', async (req, res) => {
     ? null : cleanCouponCode(body.couponCode, 'couponCode');
   const recommended = await withTransaction(actorOf(req), async (client) => {
     const row = await lockShipment(client, id, req.user.id);
+    requireSingle(row);
     requireDraft(row);
     if (await acceptedQuote(client, id)) {
       throw priceLocked();
@@ -175,6 +186,7 @@ router.post('/:id/quotes/:quoteId/accept', async (req, res) => {
   const quoteId = cleanId(req.params.quoteId);
   await withTransaction(actorOf(req), async (client) => {
     const row = await lockShipment(client, id, req.user.id);
+    requireSingle(row);
     requireDraft(row);
     if (await acceptedQuote(client, id)) {
       throw new AppError(409, 'PRICE_ACCEPTED', 'A price is already accepted for this shipment');
@@ -218,6 +230,7 @@ router.post('/:id/withdraw-price', async (req, res) => {
   const id = cleanId(req.params.id);
   await withTransaction(actorOf(req), async (client) => {
     const row = await lockShipment(client, id, req.user.id);
+    requireSingle(row);
     requireDraft(row);
     const quote = await acceptedQuote(client, id);
     if (!quote) {
@@ -232,6 +245,7 @@ router.post('/:id/request', async (req, res) => {
   const id = cleanId(req.params.id);
   await withTransaction(actorOf(req), async (client) => {
     const row = await lockShipment(client, id, req.user.id);
+    requireSingle(row);
     requireDraft(row);
     const quote = await acceptedQuote(client, id);
     if (!quote) {
@@ -270,6 +284,7 @@ router.post('/:id/cancel', async (req, res) => {
   await withTransaction(actorOf(req, reason), async (client) => {
     const firstTrip = await lockLiveTrip(client, id);
     const row = await lockShipment(client, id, req.user.id);
+    requireSingle(row);
     if (row.status === 'draft' || row.status === 'searching_driver') {
       await client.query(
         "UPDATE shipments SET status = 'cancelled', cancellation_reason = $2 WHERE id = $1",
