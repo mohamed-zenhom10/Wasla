@@ -381,10 +381,42 @@ Call it every 5 seconds on the requests screen. Returns `{ "offers": [ ... ] }`,
 - `driverEarning` is what the driver keeps. `cashToCollect` is the cash he takes from the customer, `0.00` when the customer pays by wallet.
 - The list is empty when the driver is offline or cannot work now (see `blockers` in `GET /driver/status`).
 - The customer's name and phone come after accepting, in the trip.
+- `groupId` is null for a shipment. See below for a grouped order.
+
+#### A grouped order in the list
+
+A grouped order (one pickup, many drop-offs) comes as one request with `groupId` and `stops`:
+
+```json
+{
+  "id": "52", "groupId": "4", "sentAt": "...", "expiresAt": "...", "secondsLeft": 24, "distanceToPickupM": 3120,
+  "shipmentId": null, "cargoCategoryId": null, "sizeOptionId": null, "cargoDescription": null,
+  "itemCount": 3, "isFragile": false, "weightKg": 60, "helpersCount": 1,
+  "pickup": { "address": "...", "lat": 30.0444, "lng": 31.2357, "notes": "Gate 2" },
+  "dropoff": { "address": "...", "lat": 30.0131, "lng": 31.2089, "notes": null },
+  "pickupType": "now", "pickupWindowStart": "...", "pickupWindowEnd": "...",
+  "routeDistanceM": 21400, "routeDurationS": 3100,
+  "paymentMethod": null, "farePaidBy": null,
+  "fareAmount": "1285.06", "commissionAmount": "192.76", "driverEarning": "1092.30",
+  "cashToCollect": "820.62", "cashAtPickup": "365.26", "stopsCount": 3,
+  "stops": [
+    { "order": 1, "shipmentId": "29", "cargoCategoryId": "1", "sizeOptionId": "4", "cargoDescription": "2 boxes",
+      "itemCount": 1, "isFragile": false, "weightKg": 20,
+      "dropoff": { "address": "...", "lat": 30.0131, "lng": 31.2089, "notes": null },
+      "routeDistanceM": 5632, "routeDurationS": 811, "paymentMethod": "cash", "farePaidBy": "sender",
+      "fareAmount": "365.26", "commissionAmount": "54.79", "driverEarning": "310.47", "cashToCollect": "365.26" }
+  ]
+}
+```
+
+- The money, the weight, the items and the distance on top are the totals of the drop-offs. `dropoff` on top is the first drop-off.
+- `cashAtPickup` is the cash the driver takes at the pickup (drop-offs paid by the sender in cash). `cashToCollect` is all the cash of the order.
+- The cargo, the payment and the money of each drop-off are in `stops`, in the order the customer chose. The driver can deliver in any order.
+- The vehicle carries all the drop-offs together, so `weightKg` must fit it.
 
 ### POST /driver/offers/:id/accept
 
-No body. Returns `201` with `{ "trip": { ... } }`, see Driver trips.
+No body. Returns `201` with `{ "trip": { ... } }`, see Driver trips. For a grouped order the server makes one trip per drop-off, all for this driver, and returns the trip of the first drop-off.
 
 Errors: `OFFER_EXPIRED` (the time is over), `OFFER_GONE` (another driver took it, or the customer cancelled), `SCHEDULE_CONFLICT` (the driver has another trip at that time), `NOT_ONLINE`, and the blockers of `POST /driver/online` like `POLICIES_NOT_ACCEPTED`
 
@@ -417,10 +449,13 @@ A trip is a shipment the driver accepted. A trip has everything a request has, p
 - `recipient` is null when the customer did not add one.
 - `cashStatus` is null until the driver takes the cash, then `collected`, or `charged_to_sender` when the recipient refused to pay.
 - `photos` comes with one trip (`GET /driver/trips/:id`, `current` and every step below), not in the list.
+- `groupId` and `group` are null for a shipment. See "A grouped trip" below.
 
 ### GET /driver/trips/current
 
 The trip the driver is working on now, or the next one he accepted. `{ "trip": null }` when there is none. Call it when the app opens.
+
+In a grouped trip it is the drop-off the driver arrived at, or else the first drop-off not delivered yet.
 
 ### GET /driver/trips?status=active&page=1
 
@@ -487,6 +522,36 @@ Needs the right code and at least one delivery photo. When the shipment is cash 
 Errors: `CODE_NOT_VERIFIED`, `PHOTO_REQUIRED`, `CASH_NOT_COLLECTED` (with `amount`), `WRONG_STEP`
 
 When the trip is delivered with cash, the platform commission is taken from the driver wallet (`balance` in `GET /driver/status`).
+
+### A grouped trip
+
+A grouped order has one trip per drop-off. Each trip has the usual fields of its drop-off, plus `groupId` and `group`:
+
+```json
+{
+  "group": {
+    "id": "4", "stopsCount": 3,
+    "fareAmount": "1285.06", "commissionAmount": "192.76", "driverEarning": "1092.30",
+    "cashToCollect": "820.62", "cashAtPickup": "365.26",
+    "stops": [
+      { "tripId": "8", "status": "heading_to_dropoff", "order": 1, "shipmentId": "29",
+        "cargoDescription": "2 boxes", "itemCount": 1, "isFragile": false, "weightKg": 20,
+        "dropoff": { "address": "...", "lat": 30.0131, "lng": 31.2089, "notes": null },
+        "routeDistanceM": 5632, "routeDurationS": 811, "paymentMethod": "cash", "farePaidBy": "sender",
+        "fareAmount": "365.26", "commissionAmount": "54.79", "driverEarning": "310.47", "cashToCollect": "365.26",
+        "recipient": { "name": "Mona", "phone": "+201012345678" }, "deliveryCodeVerified": false }
+    ]
+  }
+}
+```
+
+The steps use the same requests, with any `tripId` of the order:
+
+- **Together, for the whole order:** `start`, `arrive-pickup`, the pickup photos (one photo goes on every trip), `loaded` and `depart`. All the trips move at once.
+- **`loaded`:** when `group.cashAtPickup` is more than `0.00`, the driver takes that amount and sends `"cashCollected": true`. `CASH_NOT_COLLECTED` has the total in `amount`.
+- **One drop-off at a time, in any order:** `arrive-dropoff`, `verify-code` (each drop-off has its own code), the delivery photos and `deliver`, with the `tripId` of that drop-off from `group.stops`.
+- **Cancel:** before loading, cancelling any trip cancels all of them, and the order goes back to searching for another driver.
+- Each drop-off is paid to the driver wallet on its own when it is delivered.
 
 ### POST /driver/trips/:id/cancel
 

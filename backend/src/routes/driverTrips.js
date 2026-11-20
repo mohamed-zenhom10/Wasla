@@ -13,7 +13,7 @@ import {
   readPoint, readAccuracy, loadState, blockersOf, blockerError,
 } from '../lib/presence.js';
 import {
-  closeOldOffers, makeOffers, listOffers, createTrip,
+  closeOldOffers, makeOffers, listOffers, createTrip, createGroupTrips,
 } from '../lib/dispatch.js';
 import {
   EXECUTING, FINISHED, BEFORE_LOADING, loadTrip, currentTrip, listTrips, trackPoint,
@@ -52,10 +52,10 @@ router.get('/offers', async (req, res) => {
 
 async function lockOffer(client, id, driverId) {
   const { rows: [offer] } = await client.query(
-    `SELECT o.id, o.shipment_id, o.price_quote_id, o.driver_id, o.vehicle_id, o.response,
+    `SELECT o.id, o.shipment_id, o.price_quote_id, o.group_id, o.driver_id, o.vehicle_id, o.response,
             o.expires_at <= now() AS is_late
      FROM dispatch_offers o
-     WHERE o.id = $1 AND o.driver_id = $2 AND o.shipment_id IS NOT NULL
+     WHERE o.id = $1 AND o.driver_id = $2
      FOR UPDATE`,
     [id, driverId],
   );
@@ -83,6 +83,18 @@ router.post('/offers/:id/accept', async (req, res) => {
       throw new AppError(409, 'NOT_ONLINE', 'You are offline, go online first');
     }
     const offer = await lockOffer(client, id, req.user.id);
+    if (offer.group_id) {
+      await client.query('SELECT id FROM shipment_groups WHERE id = $1 FOR UPDATE', [offer.group_id]);
+      const { rows: stops } = await client.query(
+        "SELECT status FROM shipments WHERE group_id = $1 AND status <> 'cancelled' FOR UPDATE",
+        [offer.group_id],
+      );
+      if (stops.length === 0 || stops.some((stop) => stop.status !== 'searching_driver')
+        || offer.vehicle_id !== state.active_vehicle_id) {
+        throw offerGone();
+      }
+      return createGroupTrips(client, offer);
+    }
     const { rows: [shipment] } = await client.query(
       'SELECT status FROM shipments WHERE id = $1 FOR UPDATE',
       [offer.shipment_id],
@@ -124,28 +136,65 @@ router.get('/trips/:id', async (req, res) => {
   res.json({ trip: await loadTrip(cleanId(req.params.id), req.user.id, baseUrl(req)) });
 });
 
+const LOCK_SQL = `SELECT t.id, t.group_id, t.status, t.vehicle_id, t.shipment_id, t.price_quote_id,
+    t.delivery_code_verified_at, s.payment_method, s.fare_paid_by, q.customer_amount
+  FROM trips t
+  JOIN shipments s ON s.id = t.shipment_id
+  JOIN price_quotes q ON q.id = t.price_quote_id`;
+
+function wrongStep(status) {
+  return new AppError(409, 'WRONG_STEP', `The trip is ${status}`, { status });
+}
+
 async function lockTrip(client, id, driverId, status) {
   const { rows: [trip] } = await client.query(
-    `SELECT t.id, t.status, t.vehicle_id, t.shipment_id, t.price_quote_id, t.delivery_code_verified_at,
-            s.payment_method, s.fare_paid_by, q.customer_amount
-     FROM trips t
-     JOIN shipments s ON s.id = t.shipment_id
-     JOIN price_quotes q ON q.id = t.price_quote_id
-     WHERE t.id = $1 AND t.driver_id = $2
-     FOR UPDATE OF t`,
+    `${LOCK_SQL} WHERE t.id = $1 AND t.driver_id = $2 FOR UPDATE OF t`,
     [id, driverId],
   );
   if (!trip) {
     throw new AppError(404, 'NOT_FOUND', 'Trip not found');
   }
   if (trip.status !== status) {
-    throw new AppError(409, 'WRONG_STEP', `The trip is ${trip.status}`, { status: trip.status });
+    throw wrongStep(trip.status);
   }
   return trip;
 }
 
+async function lockStep(client, id, driverId, status) {
+  const { rows: [head] } = await client.query(
+    'SELECT group_id FROM trips WHERE id = $1 AND driver_id = $2',
+    [id, driverId],
+  );
+  if (!head) {
+    throw new AppError(404, 'NOT_FOUND', 'Trip not found');
+  }
+  if (!head.group_id) {
+    return [await lockTrip(client, id, driverId, status)];
+  }
+  const { rows } = await client.query(
+    `${LOCK_SQL} WHERE t.group_id = $1 AND t.driver_id = $2 AND t.status <> ALL($3::text[])
+     ORDER BY t.id FOR UPDATE OF t`,
+    [head.group_id, driverId, FINISHED],
+  );
+  const trip = rows.find((row) => row.id === id);
+  if (!trip) {
+    return [await lockTrip(client, id, driverId, status)];
+  }
+  const wrong = trip.status === status ? rows.find((row) => row.status !== status) : trip;
+  if (wrong) {
+    throw wrongStep(wrong.status);
+  }
+  return rows;
+}
+
 async function moveTrip(client, id, status) {
   await client.query('UPDATE trips SET status = $2 WHERE id = $1', [id, status]);
+}
+
+async function moveTrips(client, trips, status) {
+  for (const trip of trips) {
+    await moveTrip(client, trip.id, status);
+  }
 }
 
 async function countPhotos(client, id, stage) {
@@ -181,7 +230,8 @@ router.post('/trips/:id/start', async (req, res) => {
   const accuracy = readAccuracy(body);
   await withTransaction(actorOf(req), async (client) => {
     const state = await loadState(client, req.user.id, true);
-    const trip = await lockTrip(client, id, req.user.id, 'assigned');
+    const trips = await lockStep(client, id, req.user.id, 'assigned');
+    const [trip] = trips;
     const [blocker] = blockersOf(state);
     if (blocker) {
       throw blockerError(blocker, state);
@@ -190,8 +240,10 @@ router.post('/trips/:id/start', async (req, res) => {
       throw new AppError(409, 'VEHICLE_CHANGED', 'This trip was accepted with another vehicle, cancel it');
     }
     const { rows: [running] } = await client.query(
-      'SELECT id FROM trips WHERE driver_id = $1 AND status = ANY($2::text[]) AND id <> $3 LIMIT 1',
-      [req.user.id, EXECUTING, id],
+      `SELECT id FROM trips
+       WHERE driver_id = $1 AND status = ANY($2::text[]) AND id <> $3 AND group_id IS DISTINCT FROM $4::bigint
+       LIMIT 1`,
+      [req.user.id, EXECUTING, id, trip.group_id],
     );
     if (running) {
       throw new AppError(409, 'ANOTHER_TRIP_RUNNING', 'Finish your current trip first', { tripId: running.id });
@@ -202,7 +254,7 @@ router.post('/trips/:id/start', async (req, res) => {
        WHERE user_id = $1`,
       [req.user.id, point.lng, point.lat],
     );
-    await moveTrip(client, id, 'heading_to_pickup');
+    await moveTrips(client, trips, 'heading_to_pickup');
     await trackPoint(client, req.user.id, point, accuracy);
   });
   await replyTrip(req, res, id);
@@ -212,9 +264,9 @@ router.post('/trips/:id/arrive-pickup', async (req, res) => {
   const id = cleanId(req.params.id);
   const body = bodyOf(req);
   await withTransaction(actorOf(req), async (client) => {
-    await lockTrip(client, id, req.user.id, 'heading_to_pickup');
+    const trips = await lockStep(client, id, req.user.id, 'heading_to_pickup');
     await saveLocation(client, req.user.id, body);
-    await moveTrip(client, id, 'arrived_at_pickup');
+    await moveTrips(client, trips, 'arrived_at_pickup');
   });
   await replyTrip(req, res, id);
 });
@@ -224,19 +276,23 @@ router.put('/trips/:id/photos/:stage', imageBody, async (req, res) => {
   const stage = cleanChoice(req.params.stage, 'stage', ['pickup', 'delivery']);
   const image = readImage(req);
   const check = async (client) => {
-    await lockTrip(client, id, req.user.id, PHOTO_STATUS[stage]);
+    const trips = stage === 'pickup'
+      ? await lockStep(client, id, req.user.id, PHOTO_STATUS[stage])
+      : [await lockTrip(client, id, req.user.id, PHOTO_STATUS[stage])];
     if (await countPhotos(client, id, stage) >= MAX_PHOTOS) {
       throw new AppError(409, 'TOO_MANY_PHOTOS', `A trip can have at most ${MAX_PHOTOS} ${stage} photos`);
     }
+    return trips;
   };
   await withTransaction(null, check);
   const key = await saveImage(image, `wasla/trips/${id}`);
   await withTransaction(actorOf(req), async (client) => {
-    await check(client);
-    await client.query(
-      'INSERT INTO trip_photos (trip_id, stage, storage_key, uploaded_by) VALUES ($1, $2, $3, $4)',
-      [id, stage, key, req.user.id],
-    );
+    for (const trip of await check(client)) {
+      await client.query(
+        'INSERT INTO trip_photos (trip_id, stage, storage_key, uploaded_by) VALUES ($1, $2, $3, $4)',
+        [trip.id, stage, key, req.user.id],
+      );
+    }
   });
   res.status(201).json({ trip: await loadTrip(id, req.user.id, baseUrl(req)) });
 });
@@ -250,25 +306,31 @@ async function collectCash(client, trip, driverId, payer, status) {
   );
 }
 
-function cashNotCollected(trip) {
-  return new AppError(409, 'CASH_NOT_COLLECTED', 'Collect the cash first', { amount: trip.customer_amount });
+function cashNotCollected(amount) {
+  return new AppError(409, 'CASH_NOT_COLLECTED', 'Collect the cash first', { amount });
 }
 
 router.post('/trips/:id/loaded', async (req, res) => {
   const id = cleanId(req.params.id);
   const body = bodyOf(req);
   await withTransaction(actorOf(req), async (client) => {
-    const trip = await lockTrip(client, id, req.user.id, 'arrived_at_pickup');
+    const trips = await lockStep(client, id, req.user.id, 'arrived_at_pickup');
     if (await countPhotos(client, id, 'pickup') === 0) {
       throw new AppError(409, 'PHOTO_REQUIRED', 'Take at least one photo of the cargo first');
     }
-    if (trip.payment_method === 'cash' && trip.fare_paid_by === 'sender') {
-      if (body.cashCollected !== true) {
-        throw cashNotCollected(trip);
-      }
+    const paying = trips.filter((trip) => trip.payment_method === 'cash' && trip.fare_paid_by === 'sender');
+    if (paying.length > 0 && body.cashCollected !== true) {
+      const { rows: [cash] } = await client.query(
+        `SELECT sum(q.customer_amount) AS amount FROM trips t JOIN price_quotes q ON q.id = t.price_quote_id
+         WHERE t.id = ANY(string_to_array($1, ',')::bigint[])`,
+        [paying.map((trip) => trip.id).join(',')],
+      );
+      throw cashNotCollected(cash.amount);
+    }
+    for (const trip of paying) {
       await collectCash(client, trip, req.user.id, 'sender', 'collected');
     }
-    await moveTrip(client, id, 'loaded');
+    await moveTrips(client, trips, 'loaded');
   });
   await replyTrip(req, res, id);
 });
@@ -277,9 +339,11 @@ router.post('/trips/:id/depart', async (req, res) => {
   const id = cleanId(req.params.id);
   const vehicleFit = cleanChoice(bodyOf(req).vehicleFit, 'vehicleFit', ['suitable', 'too_small', 'too_large']);
   await withTransaction(actorOf(req), async (client) => {
-    await lockTrip(client, id, req.user.id, 'loaded');
-    await client.query('UPDATE trips SET vehicle_fit = $2 WHERE id = $1', [id, vehicleFit]);
-    await moveTrip(client, id, 'heading_to_dropoff');
+    const trips = await lockStep(client, id, req.user.id, 'loaded');
+    for (const trip of trips) {
+      await client.query('UPDATE trips SET vehicle_fit = $2 WHERE id = $1', [trip.id, vehicleFit]);
+    }
+    await moveTrips(client, trips, 'heading_to_dropoff');
   });
   await replyTrip(req, res, id);
 });
@@ -343,7 +407,7 @@ router.post('/trips/:id/deliver', async (req, res) => {
       } else if (body.payment === 'refused') {
         await collectCash(client, trip, req.user.id, 'recipient', 'charged_to_sender');
       } else {
-        throw cashNotCollected(trip);
+        throw cashNotCollected(trip.customer_amount);
       }
     }
     await moveTrip(client, id, 'delivered');

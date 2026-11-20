@@ -19,13 +19,14 @@ export const JOB_COLUMNS = `s.id AS shipment_id, s.cargo_category_id, s.size_opt
   round(q.amount * q.commission_rate, 2) AS commission_amount,
   q.amount - round(q.amount * q.commission_rate, 2) AS driver_earning`;
 
-export const TRIP_SQL = `SELECT t.id, t.status, t.planned_start_at, t.planned_end_at, t.started_at, t.loaded_at,
-    t.delivered_at, t.cancelled_at, t.cancellation_party, t.cancellation_reason, t.vehicle_fit,
+export const TRIP_SQL = `SELECT t.id, t.group_id, t.status, t.planned_start_at, t.planned_end_at, t.started_at,
+    t.loaded_at, t.delivered_at, t.cancelled_at, t.cancellation_party, t.cancellation_reason, t.vehicle_fit,
     t.delivery_code_verified_at, t.created_at,
     GREATEST(0, ps.max_delivery_code_attempts - t.delivery_code_attempts) AS code_attempts_left,
     (SELECT p.status FROM payments p WHERE p.collected_on_trip_id = t.id) AS cash_status,
     ${JOB_COLUMNS},
-    s.recipient_name, s.recipient_phone, cu.full_name AS customer_name, cu.phone AS customer_phone
+    s.recipient_name, s.recipient_phone, cu.full_name AS customer_name, cu.phone AS customer_phone,
+    t.driver_id
   FROM trips t
   JOIN shipments s ON s.id = t.shipment_id
   JOIN price_quotes q ON q.id = t.price_quote_id
@@ -67,10 +68,34 @@ export function toJob(row) {
   };
 }
 
+export function toStop(row, order) {
+  const job = toJob(row);
+  delete job.pickup;
+  delete job.helpersCount;
+  delete job.pickupType;
+  delete job.pickupWindowStart;
+  delete job.pickupWindowEnd;
+  return { order, ...job };
+}
+
+export const GROUP_TOTALS = `count(*) OVER w AS stops_count,
+    sum(s.item_count) OVER w AS total_items,
+    sum(s.weight_kg) OVER w AS total_weight,
+    bool_or(s.is_fragile) OVER w AS any_fragile,
+    sum(s.route_distance_m) OVER w AS total_distance,
+    sum(s.route_duration_s) OVER w AS total_duration,
+    sum(q.amount) OVER w AS total_fare,
+    sum(round(q.amount * q.commission_rate, 2)) OVER w AS total_commission,
+    sum(q.amount - round(q.amount * q.commission_rate, 2)) OVER w AS total_earning,
+    COALESCE(sum(q.customer_amount) FILTER (WHERE s.payment_method = 'cash') OVER w, 0)::numeric(12,2) AS total_cash,
+    COALESCE(sum(q.customer_amount) FILTER (WHERE s.payment_method = 'cash' AND s.fare_paid_by = 'sender') OVER w, 0)
+      ::numeric(12,2) AS cash_at_pickup`;
+
 export function toTrip(row) {
   const live = !FINISHED.includes(row.status);
   return {
     id: row.id,
+    groupId: row.group_id,
     status: row.status,
     ...toJob(row),
     customer: { name: row.customer_name, phone: live ? row.customer_phone : null },
@@ -103,23 +128,63 @@ export async function withPhotos(trip, baseUrl) {
   return { ...trip, photos };
 }
 
+export async function groupOf(groupId, driverId) {
+  const { rows } = await query(
+    `SELECT t.id AS trip_id, t.status, t.delivery_code_verified_at, s.recipient_name, s.recipient_phone,
+            ${JOB_COLUMNS}, ${GROUP_TOTALS}
+     FROM trips t
+     JOIN shipments s ON s.id = t.shipment_id
+     JOIN price_quotes q ON q.id = t.price_quote_id
+     WHERE t.group_id = $1 AND t.driver_id = $2
+     WINDOW w AS ()
+     ORDER BY s.delivery_sequence`,
+    [groupId, driverId],
+  );
+  const first = rows[0];
+  return {
+    id: groupId,
+    stopsCount: Number(first.stops_count),
+    fareAmount: first.total_fare,
+    commissionAmount: first.total_commission,
+    driverEarning: first.total_earning,
+    cashToCollect: first.total_cash,
+    cashAtPickup: first.cash_at_pickup,
+    stops: rows.map((row, i) => {
+      const live = !FINISHED.includes(row.status);
+      return {
+        tripId: row.trip_id,
+        status: row.status,
+        ...toStop(row, i + 1),
+        recipient: row.recipient_name ? { name: row.recipient_name, phone: live ? row.recipient_phone : null } : null,
+        deliveryCodeVerified: row.delivery_code_verified_at !== null,
+      };
+    }),
+  };
+}
+
+async function fullTrip(row, baseUrl) {
+  const trip = await withPhotos(toTrip(row), baseUrl);
+  return row.group_id ? { ...trip, group: await groupOf(row.group_id, row.driver_id) } : { ...trip, group: null };
+}
+
 export async function loadTrip(id, driverId, baseUrl) {
   const { rows: [row] } = await query(`${TRIP_SQL} WHERE t.id = $1 AND t.driver_id = $2`, [id, driverId]);
   if (!row) {
     throw new AppError(404, 'NOT_FOUND', 'Trip not found');
   }
-  return withPhotos(toTrip(row), baseUrl);
+  return fullTrip(row, baseUrl);
 }
 
 export async function currentTrip(driverId, baseUrl) {
   const { rows: [row] } = await query(
     `${TRIP_SQL}
      WHERE t.driver_id = $1 AND t.status <> ALL($2::text[])
-     ORDER BY (t.status <> 'assigned') DESC, t.planned_start_at, t.id
+     ORDER BY (t.status = 'arrived_at_dropoff') DESC, (t.status <> 'assigned') DESC, t.planned_start_at,
+              s.delivery_sequence NULLS FIRST, t.id
      LIMIT 1`,
     [driverId, FINISHED],
   );
-  return row ? withPhotos(toTrip(row), baseUrl) : null;
+  return row ? fullTrip(row, baseUrl) : null;
 }
 
 export async function listTrips(driverId, finished, limit, offset) {
