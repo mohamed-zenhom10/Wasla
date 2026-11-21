@@ -3,7 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
 import 'package:main/models/shipment.dart';
+import 'package:main/pages/cargo_category_page.dart';
+import 'package:main/pages/no_driver_found_page.dart';
+import 'package:main/pages/shipment_details_page.dart';
 import 'package:main/pages/tracking_driver_arriving_page.dart';
+import 'package:main/services/cargo_order_service.dart';
 import 'package:main/services/shipment_service.dart';
 import 'package:main/theme/app_theme.dart';
 
@@ -20,9 +24,10 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
   final _service = ShipmentService();
   Shipment? _shipment;
   String? _errorMessage;
-  bool _isLoading = false;
+  bool _isLoading = true;
+  bool _isCancelling = false;
+  bool _openedNoDriverScreen = false;
   Timer? _timer;
-  bool _navigatedToTracking = false;
 
   @override
   void initState() {
@@ -47,12 +52,24 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
         _shipment = shipment;
         _errorMessage = null;
       });
-      if (shipment.trip != null && !_navigatedToTracking) {
-        _navigatedToTracking = true;
+      if (shipment.trip != null && !_openedNoDriverScreen) {
         _timer?.cancel();
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
             builder: (_) => TrackingDriverArrivingPage(shipmentId: widget.shipmentId),
+          ),
+        );
+        return;
+      }
+      if (_isNoDriverFound(shipment) && !_openedNoDriverScreen) {
+        _openedNoDriverScreen = true;
+        _timer?.cancel();
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(
+            builder: (_) => NoDriverFoundPage(
+              shipment: shipment,
+              onTryAgain: () => _startNewBookingFrom(shipment),
+            ),
           ),
         );
       }
@@ -62,6 +79,148 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
     } finally {
       if (mounted && !silent) setState(() => _isLoading = false);
     }
+  }
+
+  bool _isNoDriverFound(Shipment shipment) =>
+      shipment.status == 'cancelled' &&
+      shipment.cancellationParty == 'platform' &&
+      shipment.cancellationReason == 'no_driver_found';
+
+  Future<void> _viewDetails() async {
+    final id = widget.shipmentId;
+    if (id == null) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ShipmentDetailsPage(shipmentId: id, readOnly: true),
+      ),
+    );
+  }
+
+  Future<void> _cancelAndEdit() async {
+    final shipment = _shipment;
+    final id = widget.shipmentId;
+    if (shipment == null || id == null || _isCancelling) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel and edit?'),
+        content: const Text(
+          'This shipment will be cancelled and a new booking will be created with the same details.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep searching'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Cancel and edit'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await _cancelShipment(shipment, acceptFee: false);
+  }
+
+  Future<void> _cancelShipment(Shipment shipment, {required bool acceptFee}) async {
+    setState(() => _isCancelling = true);
+    try {
+      await _service.cancelShipment(
+        shipment,
+        reason: 'Changed my mind',
+        acceptFee: acceptFee,
+      );
+      if (!mounted) return;
+      await _startNewBookingFrom(shipment);
+    } on ShipmentApiException catch (error) {
+      if (!mounted) return;
+      if (error.code == 'CANCEL_FEE') {
+        final fee = error.details?['fee']?.toString();
+        final accepted = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Cancellation fee'),
+            content: Text(
+              fee == null
+                  ? 'A cancellation fee applies. Do you want to continue?'
+                  : 'A cancellation fee of $fee applies. Do you want to continue?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('No'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Yes'),
+              ),
+            ],
+          ),
+        );
+        if (accepted == true && mounted) {
+          await _cancelShipment(shipment, acceptFee: true);
+        }
+        return;
+      }
+      setState(() => _errorMessage = error.message);
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
+  Future<void> _startNewBookingFrom(Shipment shipment) async {
+    final service = ShipmentService();
+    final catalog = await service.getCatalog();
+    final draft = CargoOrderDraft()
+      ..catalog = catalog
+      ..categoryId = shipment.cargoCategoryId
+      ..sizeOptionId = shipment.sizeOptionId
+      ..cargoDescription = shipment.cargoDescription ?? ''
+      ..pickupAddress = shipment.pickup?.address ?? ''
+      ..pickupLatitude = shipment.pickup?.latitude
+      ..pickupLongitude = shipment.pickup?.longitude
+      ..pickupNotes = shipment.pickup?.notes ?? ''
+      ..dropoffAddress = shipment.dropoff?.address ?? ''
+      ..dropoffLatitude = shipment.dropoff?.latitude
+      ..dropoffLongitude = shipment.dropoff?.longitude
+      ..dropoffNotes = shipment.dropoff?.notes ?? ''
+      ..itemCount = shipment.itemCount ?? 1
+      ..isFragile = shipment.isFragile ?? false
+      ..weightKg = shipment.weightKg
+      ..helpersCount = shipment.helpersCount ?? 0
+      ..pickupType = shipment.pickupType ?? 'now'
+      ..scheduledAt = shipment.pickupAt
+      ..paymentMethod = shipment.paymentMethod ?? 'cash'
+      ..farePaidBy = shipment.farePaidBy ?? 'sender'
+      ..recipientName = shipment.recipientName ?? ''
+      ..recipientPhone = shipment.recipientPhone ?? ''
+      ..requestedVehicleTypeId = shipment.requestedVehicleTypeId
+      ..useAiEstimate = false;
+
+    ShipmentCargoCategory? category;
+    for (final item in catalog.categories) {
+      if (item.id == shipment.cargoCategoryId) {
+        category = item;
+        break;
+      }
+    }
+    if (category != null) {
+      draft.category = category.nameEn;
+      if (shipment.sizeOptionId != null &&
+          category.sizes.any((size) => size.id == shipment.sizeOptionId)) {
+        draft.sizeOptionId = shipment.sizeOptionId;
+      }
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => CargoCategoryPage(draft: draft),
+      ),
+    );
   }
 
   @override
@@ -103,7 +262,7 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
                       const SizedBox(height: 20),
                       Text(
                         shipment == null
-                            ? 'Searching for a driver'
+                            ? 'Finding your driver'
                             : 'Status: ${shipment.status}',
                         style: AppTypography.headingSm,
                         textAlign: TextAlign.center,
@@ -122,7 +281,7 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
                           style: AppTypography.bodyMd,
                         ),
                       ],
-                      if (_isLoading) ...[
+                      if (_isLoading && shipment == null) ...[
                         const SizedBox(height: 20),
                         const CircularProgressIndicator(),
                       ],
@@ -136,15 +295,15 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
               child: Column(
                 children: [
                   WaslaButton(
-                    text: 'Refresh',
+                    text: 'View details',
                     variant: WaslaButtonVariant.secondary,
-                    onPressed: _isLoading ? null : () => _refresh(),
+                    onPressed: _isCancelling ? null : _viewDetails,
                   ),
                   const SizedBox(height: 8),
                   WaslaButton(
-                    text: 'Back',
+                    text: _isCancelling ? 'Cancelling...' : 'Cancel and edit',
                     variant: WaslaButtonVariant.primary,
-                    onPressed: () => Navigator.of(context).maybePop(),
+                    onPressed: _isCancelling ? null : _cancelAndEdit,
                   ),
                 ],
               ),

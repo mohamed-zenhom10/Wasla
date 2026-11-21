@@ -9,12 +9,14 @@ class ShipmentApiException implements Exception {
     required this.message,
     this.field,
     this.statusCode,
+    this.details,
   });
 
   final String code;
   final String message;
   final String? field;
   final int? statusCode;
+  final Map<String, dynamic>? details;
 
   @override
   String toString() => message;
@@ -358,6 +360,7 @@ class ShipmentService {
         message: error.message,
         field: error.field,
         statusCode: error.statusCode,
+        details: error.details,
       );
     }
   }

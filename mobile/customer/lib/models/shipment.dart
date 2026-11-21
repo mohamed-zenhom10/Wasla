@@ -160,6 +160,9 @@ class Shipment {
     this.routeDurationS,
     this.deliveryCode,
     this.createdAt,
+    this.cancelledAt,
+    this.cancellationParty,
+    this.cancellationReason,
     this.photos = const [],
     this.quotes = const [],
     this.acceptedQuote,
@@ -191,6 +194,9 @@ class Shipment {
   final int? routeDurationS;
   final String? deliveryCode;
   final DateTime? createdAt;
+  final DateTime? cancelledAt;
+  final String? cancellationParty;
+  final String? cancellationReason;
   final List<ShipmentPhoto> photos;
   final List<ShipmentQuote> quotes;
   final ShipmentQuote? acceptedQuote;
@@ -259,6 +265,9 @@ class Shipment {
       routeDurationS: (json['routeDurationS'] as num?)?.toInt(),
       deliveryCode: json['deliveryCode']?.toString(),
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
+      cancelledAt: DateTime.tryParse(json['cancelledAt']?.toString() ?? ''),
+      cancellationParty: json['cancellationParty']?.toString(),
+      cancellationReason: json['cancellationReason']?.toString(),
       photos: parseList(json['photos'], ShipmentPhoto.fromJson),
       quotes: parseList(json['quotes'], ShipmentQuote.fromJson),
       acceptedQuote: parseMap(json['acceptedQuote']) == null

@@ -14,10 +14,12 @@ class ShipmentDetailsPage extends StatefulWidget {
     super.key,
     required this.shipmentId,
     this.initialShipment,
+    this.readOnly = false,
   });
 
   final String shipmentId;
   final Shipment? initialShipment;
+  final bool readOnly;
 
   @override
   State<ShipmentDetailsPage> createState() => _ShipmentDetailsPageState();
@@ -260,7 +262,7 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
                   ]),
                 ],
                 const SizedBox(height: 18),
-                if (shipment.acceptedQuote != null) ...[
+                if (!widget.readOnly && shipment.acceptedQuote != null) ...[
                   if (shipment.status != 'searching_driver' &&
                       shipment.status != 'driver_assigned' &&
                       shipment.status != 'in_progress' &&
@@ -279,7 +281,7 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
                     isLoading: _isLoading,
                     onPressed: _isLoading ? null : _withdrawPrice,
                   ),
-                ] else if (shipment.isEditable) ...[
+                ] else if (!widget.readOnly && shipment.isEditable) ...[
                   WaslaButton(
                     text: 'Edit draft shipment',
                     variant: WaslaButtonVariant.primary,

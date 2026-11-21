@@ -10,7 +10,8 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with SingleTickerProviderStateMixin {
   static const _pages = <_OnboardingPageData>[
     _OnboardingPageData(
       image: 'assets/images/onboarding/onboarding_1.png',
@@ -32,9 +33,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   bool _isFinishing = false;
+  late final AnimationController _floatingController;
+  late final Animation<double> _floatingAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _floatingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+    _floatingAnimation = Tween<double>(begin: 0, end: -10).animate(
+      CurvedAnimation(parent: _floatingController, curve: Curves.easeInOut),
+    );
+  }
 
   @override
   void dispose() {
+    _floatingController.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -145,7 +161,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             aspectRatio: 1.03,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.asset(page.image, fit: BoxFit.cover),
+              child: AnimatedBuilder(
+                animation: _floatingAnimation,
+                builder: (context, child) {
+                  return Transform.translate(
+                    offset: Offset(0, _floatingAnimation.value),
+                    child: child,
+                  );
+                },
+                child: Image.asset(page.image, fit: BoxFit.cover),
+              ),
             ),
           ),
           const SizedBox(height: 22),

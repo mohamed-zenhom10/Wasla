@@ -36,6 +36,15 @@ class HomeScreenState extends State<HomeScreen> {
     _activeBookingDraft = null;
   }
 
+  void resetLocationSelection() {
+    _pickupController.clear();
+    _destinationController.clear();
+    _pickupPoint = null;
+    _destinationPoint = null;
+    _useAiEstimate = false;
+    if (mounted) setState(() {});
+  }
+
   void markShipmentSubmitted(String shipmentId) {
     _submittedShipmentIds.add(shipmentId);
     if (_activeBookingDraft?.shipment?.id == shipmentId) {

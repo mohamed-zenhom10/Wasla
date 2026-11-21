@@ -37,8 +37,8 @@ class AppPageHeader extends StatelessWidget {
               child: Text(
                 title,
                 style: AppTypography.headingSm.copyWith(
-                  fontSize: 25,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
                   height: 1.15,
                 ),
               ),

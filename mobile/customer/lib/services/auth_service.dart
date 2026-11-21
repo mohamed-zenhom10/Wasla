@@ -87,12 +87,14 @@ class AuthenticatedApiException implements Exception {
     required this.message,
     this.field,
     this.statusCode,
+    this.details,
   });
 
   final String code;
   final String message;
   final String? field;
   final int? statusCode;
+  final Map<String, dynamic>? details;
 
   @override
   String toString() => message;
@@ -215,7 +217,11 @@ class AuthService {
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final error = decoded['error'];
-      final errorMap = error is Map ? error : const <String, dynamic>{};
+      final errorMap = error is Map<String, dynamic>
+          ? error
+          : (error is Map
+              ? Map<String, dynamic>.from(error)
+              : const <String, dynamic>{});
       final code = errorMap['code']?.toString() ?? 'REQUEST_FAILED';
       final message =
           errorMap['message']?.toString() ?? 'The request could not be completed.';
@@ -230,6 +236,7 @@ class AuthService {
             ? 'A Customer account is required to manage shipments.'
             : message,
         statusCode: response.statusCode,
+        details: errorMap,
       );
     }
 

@@ -98,9 +98,9 @@ class CargoPageScaffold extends StatelessWidget {
                       title,
                       style: const TextStyle(
                         color: AppColors.darkGreen,
-                        fontSize: 27,
+                        fontSize: 24,
                         height: 1.15,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 8),
