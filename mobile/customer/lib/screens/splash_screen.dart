@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:main/screens/home_screen.dart';
 import 'package:main/screens/onboarding_screen.dart';
 import 'package:main/screens/welcome_screen.dart';
+import 'package:main/services/auth_service.dart';
 import 'package:main/services/onboarding_service.dart';
 import 'package:main/theme/app_theme.dart';
 
@@ -21,6 +23,20 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _continueAfterSplash() async {
     await Future<void>.delayed(const Duration(seconds: 2));
     if (!mounted) return;
+
+    final isAuthenticated = await AuthService.hasValidSession();
+    if (!mounted) return;
+
+    if (AuthService.sessionExpired.value) {
+      return;
+    }
+
+    if (isAuthenticated) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(builder: (_) => const HomeScreen()),
+      );
+      return;
+    }
 
     final onboardingCompleted = await OnboardingService.isCompleted();
     if (!mounted) return;

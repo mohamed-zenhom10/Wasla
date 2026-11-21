@@ -3,6 +3,7 @@ import 'package:main/components/main_button.dart';
 import 'package:main/models/shipment.dart';
 import 'package:main/pages/driver_matching_page.dart';
 import 'package:main/pages/cargo_category_page.dart';
+import 'package:main/screens/home_screen.dart';
 import 'package:main/pages/vehicle_small_page.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/services/shipment_service.dart';
@@ -59,6 +60,8 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
     try {
       final updated = await _service.requestShipment(shipment);
       if (!mounted) return;
+      final homeState = context.findAncestorStateOfType<HomeScreenState>();
+      homeState?.markShipmentSubmitted(updated.id);
       setState(() => _shipment = updated);
       Navigator.of(context).push(
         MaterialPageRoute<void>(

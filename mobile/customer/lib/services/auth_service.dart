@@ -1,13 +1,25 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 class AuthSession {
-  const AuthSession({required this.token, required this.user});
+  const AuthSession({
+    required this.token,
+    this.refreshToken,
+    this.expiresAt,
+    required this.user,
+  });
 
   final String token;
+  final String? refreshToken;
+  final DateTime? expiresAt;
   final Map<String, dynamic> user;
+
+  bool get isExpired =>
+      expiresAt != null && !expiresAt!.isAfter(DateTime.now());
 
   String? get fullName {
     final name = user['fullName'] ?? user['name'];
@@ -22,10 +34,18 @@ class AuthSession {
     return combined.isEmpty ? null : combined;
   }
 
-  Map<String, dynamic> toJson() => {'token': token, 'user': user};
+  Map<String, dynamic> toJson() => {
+    'token': token,
+    'accessToken': token,
+    if (refreshToken != null) 'refreshToken': refreshToken,
+    if (expiresAt != null) 'expiresAt': expiresAt!.toIso8601String(),
+    'user': user,
+  };
 
   factory AuthSession.fromJson(Map<String, dynamic> data) {
     final token = data['token'] ?? data['accessToken'];
+    final refreshToken = data['refreshToken']?.toString();
+    final expiresAt = DateTime.tryParse(data['expiresAt']?.toString() ?? '');
     final userMap = data['user'] is Map
         ? Map<String, dynamic>.from(data['user'] as Map)
         : <String, dynamic>{};
@@ -34,7 +54,12 @@ class AuthSession {
       throw const FormatException('Authentication token is missing.');
     }
 
-    return AuthSession(token: token.toString(), user: userMap);
+    return AuthSession(
+      token: token.toString(),
+      refreshToken: refreshToken,
+      expiresAt: expiresAt,
+      user: userMap,
+    );
   }
 }
 
@@ -81,6 +106,22 @@ class AuthService {
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static http.Client _httpClient = http.Client();
 
+  static final ValueNotifier<bool> sessionExpired = ValueNotifier<bool>(false);
+  static bool _sessionExpiredRedirectScheduled = false;
+
+  static void markSessionExpired() {
+    if (_sessionExpiredRedirectScheduled) return;
+    _sessionExpiredRedirectScheduled = true;
+    sessionExpired.value = true;
+  }
+
+  static void clearSessionExpiredRedirect() {
+    _sessionExpiredRedirectScheduled = false;
+    sessionExpired.value = false;
+  }
+
+  static Future<String>? _refreshFuture;
+
   static void replaceHttpClientForTesting(http.Client client) {
     _httpClient = client;
   }
@@ -101,70 +142,98 @@ class AuthService {
     String? contentType,
     Map<String, String>? query,
     bool authenticated = true,
+    bool allowRefresh = true,
   }) async {
-    final request = http.Request(method, apiUri(endpoint, query: query));
-    request.headers['Accept'] = 'application/json';
-
-    if (authenticated) {
-      final token = await _secureStorage.read(key: 'wasla_auth_token');
-      if (token == null || token.trim().isEmpty) {
-        throw const AuthenticatedApiException(
-          code: 'UNAUTHENTICATED',
-          message: 'Please sign in with a Customer account to continue.',
-        );
-      }
-      request.headers['Authorization'] = 'Bearer $token';
-    }
-
-    if (bytes != null) {
-      request.headers['Content-Type'] =
-          contentType ?? 'application/octet-stream';
-      request.bodyBytes = bytes;
-    } else if (body != null) {
-      request.headers['Content-Type'] = 'application/json';
-      request.body = jsonEncode(body);
-    } else if (contentType != null) {
-      request.headers['Content-Type'] = contentType;
-    }
-
-    try {
-      final streamed = await _httpClient
-          .send(request)
-          .timeout(const Duration(seconds: 30));
-      final response = await http.Response.fromStream(streamed)
-          .timeout(const Duration(seconds: 30));
+    if (!authenticated) {
+      final response = await _performRequest(
+        method: method,
+        endpoint: endpoint,
+        body: body,
+        bytes: bytes,
+        contentType: contentType,
+        query: query,
+      );
       final decoded = _decodeBody(response.body);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final error = decoded['error'];
         final errorMap = error is Map ? error : const <String, dynamic>{};
         final code = errorMap['code']?.toString() ?? 'REQUEST_FAILED';
         final message =
-            errorMap['message']?.toString() ??
-            'The request could not be completed.';
+            errorMap['message']?.toString() ?? 'The request could not be completed.';
         throw AuthenticatedApiException(
           code: code,
           field: errorMap['field']?.toString(),
-          message: response.statusCode == 403 && code == 'ROLE_REQUIRED'
-              ? 'A Customer account is required to manage shipments.'
-              : message,
+          message: message,
           statusCode: response.statusCode,
         );
       }
       return decoded;
-    } on http.ClientException catch (error) {
-      throw AuthenticatedApiException(
-        code: 'NETWORK_ERROR',
-        message:
-            'Network error: ${error.message}. Please check your internet connection.',
-      );
-    } on FormatException catch (error) {
-      throw AuthenticatedApiException(
-        code: 'INVALID_RESPONSE',
-        message: 'The server returned an invalid response: ${error.message}',
-      );
-    } on AuthenticatedApiException {
-      rethrow;
     }
+
+    var token = await _secureStorage.read(key: 'wasla_auth_token');
+    if (token == null || token.trim().isEmpty) {
+      throw const AuthenticatedApiException(
+        code: 'UNAUTHENTICATED',
+        message: 'Please sign in with a Customer account to continue.',
+      );
+    }
+
+    var response = await _performRequest(
+      method: method,
+      endpoint: endpoint,
+      body: body,
+      bytes: bytes,
+      contentType: contentType,
+      query: query,
+      token: token,
+    );
+    var decoded = _decodeBody(response.body);
+
+    if (response.statusCode == 401 &&
+        allowRefresh &&
+        _errorCode(decoded) == 'TOKEN_EXPIRED') {
+      try {
+        token = await _refreshAccessToken();
+      } on AuthenticatedApiException catch (error) {
+        if (error.code == 'SESSION_ENDED') {
+          await clearSession();
+          markSessionExpired();
+        }
+        rethrow;
+      }
+      response = await _performRequest(
+        method: method,
+        endpoint: endpoint,
+        body: body,
+        bytes: bytes,
+        contentType: contentType,
+        query: query,
+        token: token,
+      );
+      decoded = _decodeBody(response.body);
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final error = decoded['error'];
+      final errorMap = error is Map ? error : const <String, dynamic>{};
+      final code = errorMap['code']?.toString() ?? 'REQUEST_FAILED';
+      final message =
+          errorMap['message']?.toString() ?? 'The request could not be completed.';
+      if (response.statusCode == 401 && code == 'SESSION_ENDED') {
+        await clearSession();
+        markSessionExpired();
+      }
+      throw AuthenticatedApiException(
+        code: code,
+        field: errorMap['field']?.toString(),
+        message: response.statusCode == 403 && code == 'ROLE_REQUIRED'
+            ? 'A Customer account is required to manage shipments.'
+            : message,
+        statusCode: response.statusCode,
+      );
+    }
+
+    return decoded;
   }
 
   static Future<AuthResult> login({
@@ -250,22 +319,41 @@ class AuthService {
   }
 
   static Future<AuthResult> logout() async {
-    try {
-      final token = await _secureStorage.read(key: 'wasla_auth_token');
-      if (token == null || token.trim().isEmpty) {
-        return AuthResult.failure(message: 'No active session was found.');
-      }
+    final session = await loadSession();
+    final refreshToken = session?.refreshToken;
 
-      return await _request(
-        endpoint: '/auth/logout',
-        payload: const {},
-        successMessage: 'Logged out successfully.',
-        bearerToken: token,
-        onSuccess: (_) => null,
-      );
-    } finally {
-      await clearSession();
+    try {
+      if (refreshToken != null && refreshToken.trim().isNotEmpty) {
+        final response = await _httpClient
+            .post(
+              apiUri('/auth/logout'),
+              headers: const {'Content-Type': 'application/json'},
+              body: jsonEncode({'refreshToken': refreshToken}),
+            )
+            .timeout(const Duration(seconds: 20));
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          final decoded = _decodeBody(response.body);
+          final code = _errorCode(decoded) ?? 'REQUEST_FAILED';
+          if (code == 'SESSION_ENDED') {
+            await clearSession();
+          }
+          return AuthResult.failure(
+            message: _messageFromPayload(
+              decoded,
+              fallback: 'Logout failed.',
+            ),
+          );
+        }
+      }
+    } on http.ClientException {
+      // Local cleanup still happens below.
+    } catch (_) {
+      // Local cleanup still happens below.
     }
+
+    await clearSession();
+    clearSessionExpiredRedirect();
+    return AuthResult.success(message: 'Logged out successfully.');
   }
 
   static Future<AuthResult> _request({
@@ -319,6 +407,18 @@ class AuthService {
 
   static Future<void> saveSession(AuthSession session) async {
     await _secureStorage.write(key: 'wasla_auth_token', value: session.token);
+    if (session.refreshToken != null && session.refreshToken!.trim().isNotEmpty) {
+      await _secureStorage.write(
+        key: 'wasla_refresh_token',
+        value: session.refreshToken,
+      );
+    }
+    if (session.expiresAt != null) {
+      await _secureStorage.write(
+        key: 'wasla_token_expiry',
+        value: session.expiresAt!.millisecondsSinceEpoch.toString(),
+      );
+    }
     await _secureStorage.write(
       key: 'wasla_user_data',
       value: jsonEncode(session.user),
@@ -328,41 +428,204 @@ class AuthService {
   static Future<void> clearSession() async {
     await Future.wait([
       _secureStorage.delete(key: 'wasla_auth_token'),
+      _secureStorage.delete(key: 'wasla_refresh_token'),
+      _secureStorage.delete(key: 'wasla_token_expiry'),
       _secureStorage.delete(key: 'wasla_user_data'),
     ]);
   }
 
   static Future<AuthSession?> loadSession() async {
     final token = await _secureStorage.read(key: 'wasla_auth_token');
+    final refreshToken = await _secureStorage.read(key: 'wasla_refresh_token');
+    final expiryMillis = await _secureStorage.read(key: 'wasla_token_expiry');
     final userData = await _secureStorage.read(key: 'wasla_user_data');
     if (token == null || token.trim().isEmpty) {
       return null;
     }
 
+    DateTime? expiresAt;
+    if (expiryMillis != null && expiryMillis.trim().isNotEmpty) {
+      final parsed = int.tryParse(expiryMillis);
+      if (parsed != null) {
+        expiresAt = DateTime.fromMillisecondsSinceEpoch(parsed);
+      }
+    }
+
     if (userData == null || userData.trim().isEmpty) {
-      return const AuthSession(token: '', user: {});
+      return AuthSession(
+        token: token,
+        refreshToken: refreshToken,
+        expiresAt: expiresAt,
+        user: const <String, dynamic>{},
+      );
     }
 
     try {
       final decodedUser = jsonDecode(userData);
       if (decodedUser is Map<String, dynamic>) {
-        return AuthSession(token: token, user: decodedUser);
+        return AuthSession(
+          token: token,
+          refreshToken: refreshToken,
+          expiresAt: expiresAt,
+          user: decodedUser,
+        );
       }
       if (decodedUser is Map) {
         return AuthSession(
           token: token,
+          refreshToken: refreshToken,
+          expiresAt: expiresAt,
           user: Map<String, dynamic>.from(decodedUser),
         );
       }
-      return AuthSession(token: token, user: {'name': 'Wasla User'});
+      return AuthSession(
+        token: token,
+        refreshToken: refreshToken,
+        expiresAt: expiresAt,
+        user: const <String, dynamic>{},
+      );
     } on FormatException {
-      return AuthSession(token: token, user: {'name': 'Wasla User'});
+      return AuthSession(
+        token: token,
+        refreshToken: refreshToken,
+        expiresAt: expiresAt,
+        user: const <String, dynamic>{},
+      );
     }
   }
 
   static Future<bool> isAuthenticated() async {
     final session = await loadSession();
     return session != null && session.token.trim().isNotEmpty;
+  }
+
+  static Future<bool> hasValidSession() async {
+    final session = await loadSession();
+    if (session == null || session.token.trim().isEmpty) {
+      return false;
+    }
+    if (!session.isExpired) {
+      return true;
+    }
+    try {
+      await _refreshAccessToken();
+      return true;
+    } on AuthenticatedApiException {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<String> _refreshAccessToken() {
+    final existing = _refreshFuture;
+    if (existing != null) {
+      return existing;
+    }
+
+    final future = _performRefresh();
+    _refreshFuture = future;
+    return future.whenComplete(() {
+      if (identical(_refreshFuture, future)) {
+        _refreshFuture = null;
+      }
+    });
+  }
+
+  static Future<String> _performRefresh() async {
+    final session = await loadSession();
+    final refreshToken = session?.refreshToken;
+    if (refreshToken == null || refreshToken.trim().isEmpty) {
+      await clearSession();
+      markSessionExpired();
+      throw const AuthenticatedApiException(
+        code: 'SESSION_ENDED',
+        message: 'Your session has ended. Please sign in again.',
+      );
+    }
+
+    try {
+      final response = await _httpClient
+          .post(
+            apiUri('/auth/refresh'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'refreshToken': refreshToken}),
+          )
+          .timeout(const Duration(seconds: 20));
+      final decoded = _decodeBody(response.body);
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final code = _errorCode(decoded) ?? 'REQUEST_FAILED';
+        if (code == 'SESSION_ENDED') {
+          await clearSession();
+          markSessionExpired();
+        }
+        throw AuthenticatedApiException(
+          code: code,
+          message: _messageFromPayload(
+            decoded,
+            fallback: 'Your session has ended. Please sign in again.',
+          ),
+          statusCode: response.statusCode,
+        );
+      }
+
+      final refreshedSession = _sessionFromPayload(
+        decoded,
+        fallbackUser: session?.user,
+      );
+      if (refreshedSession == null) {
+        throw const AuthenticatedApiException(
+          code: 'INVALID_RESPONSE',
+          message: 'The server returned an invalid response.',
+        );
+      }
+      await saveSession(refreshedSession);
+      return refreshedSession.token;
+    } on http.ClientException {
+      throw const AuthenticatedApiException(
+        code: 'NETWORK_ERROR',
+        message: 'Network error. Please check your internet connection.',
+      );
+    } on FormatException catch (error) {
+      throw AuthenticatedApiException(
+        code: 'INVALID_RESPONSE',
+        message: 'The server returned an invalid response: ${error.message}',
+      );
+    }
+  }
+
+  static Future<http.Response> _performRequest({
+    required String method,
+    required String endpoint,
+    Map<String, dynamic>? body,
+    List<int>? bytes,
+    String? contentType,
+    Map<String, String>? query,
+    String? token,
+  }) async {
+    final request = http.Request(method, apiUri(endpoint, query: query));
+    request.headers['Accept'] = 'application/json';
+
+    if (token != null && token.trim().isNotEmpty) {
+      request.headers['Authorization'] = 'Bearer $token';
+    }
+
+    if (bytes != null) {
+      request.headers['Content-Type'] =
+          contentType ?? 'application/octet-stream';
+      request.bodyBytes = bytes;
+    } else if (body != null) {
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode(body);
+    } else if (contentType != null) {
+      request.headers['Content-Type'] = contentType;
+    }
+
+    final streamed = await _httpClient
+        .send(request)
+        .timeout(const Duration(seconds: 30));
+    return http.Response.fromStream(streamed).timeout(const Duration(seconds: 30));
   }
 
   static Map<String, dynamic> _decodeBody(String body) {
@@ -384,15 +647,19 @@ class AuthService {
     }
   }
 
+  static String? _errorCode(Map<String, dynamic> payload) {
+    final error = payload['error'];
+    final errorMap = error is Map ? error : const <String, dynamic>{};
+    return errorMap['code']?.toString();
+  }
+
   static String _messageFromPayload(
     Map<String, dynamic> payload, {
     required String fallback,
   }) {
     final error = payload['error'];
     final rawMessage =
-        payload['message'] ??
-        (error is Map ? error['message'] : error) ??
-        payload['detail'];
+        payload['message'] ?? (error is Map ? error['message'] : error) ?? payload['detail'];
     if (rawMessage is String && rawMessage.trim().isNotEmpty) {
       return rawMessage;
     }
@@ -411,24 +678,51 @@ class AuthService {
     return fallback;
   }
 
-  static AuthSession? _sessionFromPayload(Map<String, dynamic> payload) {
+  static AuthSession? _sessionFromPayload(
+    Map<String, dynamic> payload, {
+    Map<String, dynamic>? fallbackUser,
+  }) {
     final dataNode = payload['data'];
-    final userNode = payload['user'];
+    final userNode = payload['user'] ?? dataNode?['user'];
     final token =
         payload['token'] ??
         payload['accessToken'] ??
         dataNode?['token'] ??
         dataNode?['accessToken'];
+    final refreshToken =
+        payload['refreshToken'] ??
+        payload['refresh_token'] ??
+        dataNode?['refreshToken'] ??
+        dataNode?['refresh_token'];
+    final expiresIn =
+        payload['expiresIn'] ??
+        payload['expires_in'] ??
+        dataNode?['expiresIn'] ??
+        dataNode?['expires_in'];
+
     final user = userNode is Map
         ? Map<String, dynamic>.from(userNode)
-        : dataNode is Map && dataNode['user'] is Map
-        ? Map<String, dynamic>.from(dataNode['user'] as Map)
-        : <String, dynamic>{};
+        : fallbackUser ?? <String, dynamic>{};
 
     if (token == null || token.toString().trim().isEmpty) {
       return null;
     }
 
-    return AuthSession(token: token.toString(), user: user);
+    DateTime? expiresAt;
+    if (expiresIn is num) {
+      expiresAt = DateTime.now().add(Duration(seconds: expiresIn.toInt()));
+    } else if (expiresIn is String) {
+      final parsed = int.tryParse(expiresIn);
+      if (parsed != null) {
+        expiresAt = DateTime.now().add(Duration(seconds: parsed));
+      }
+    }
+
+    return AuthSession(
+      token: token.toString(),
+      refreshToken: refreshToken?.toString(),
+      expiresAt: expiresAt,
+      user: user,
+    );
   }
 }

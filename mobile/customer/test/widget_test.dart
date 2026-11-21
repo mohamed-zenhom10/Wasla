@@ -19,6 +19,7 @@ import 'package:main/screens/welcome_screen.dart';
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
   });
 
   testWidgets('completing onboarding persists and skips it next launch', (

@@ -30,6 +30,18 @@ class HomeScreenState extends State<HomeScreen> {
   LatLng? _pickupPoint;
   LatLng? _destinationPoint;
   CargoOrderDraft? _activeBookingDraft;
+  final Set<String> _submittedShipmentIds = <String>{};
+
+  void clearActiveBookingDraft() {
+    _activeBookingDraft = null;
+  }
+
+  void markShipmentSubmitted(String shipmentId) {
+    _submittedShipmentIds.add(shipmentId);
+    if (_activeBookingDraft?.shipment?.id == shipmentId) {
+      _activeBookingDraft = null;
+    }
+  }
 
   @override
   void initState() {
@@ -101,6 +113,11 @@ class HomeScreenState extends State<HomeScreen> {
   void _resumeOrder() {
     final draft = _activeBookingDraft;
     if (draft == null) return;
+    if (draft.shipment != null &&
+        _submittedShipmentIds.contains(draft.shipment!.id)) {
+      _activeBookingDraft = null;
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
     );
