@@ -67,7 +67,9 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    return Material(
+      color: AppColors.white,
+      child: SafeArea(
       child: ListView(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
@@ -110,8 +112,10 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
           ],
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
 }
 
 class _NegativeBalanceWarning extends StatelessWidget {

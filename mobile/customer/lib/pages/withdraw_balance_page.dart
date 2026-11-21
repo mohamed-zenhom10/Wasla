@@ -86,7 +86,9 @@ class _WithdrawBalancePageState extends State<WithdrawBalancePage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
         children: [
@@ -132,6 +134,7 @@ class _WithdrawBalancePageState extends State<WithdrawBalancePage> {
           ],
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
