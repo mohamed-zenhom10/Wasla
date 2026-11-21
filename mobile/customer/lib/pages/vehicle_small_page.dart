@@ -349,7 +349,7 @@ class _VehiclesSmallPageState extends State<VehiclesSmallPage> {
                     child: Text(
                       _vehicleName(quote.vehicleTypeId),
                       style: AppTypography.bodyMd.copyWith(
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),

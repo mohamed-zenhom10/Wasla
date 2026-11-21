@@ -33,20 +33,28 @@ void main() {
     expect(find.text('MAKE LOGISTICS SIMPLE'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 2));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
     expect(find.text('Move anything.'), findsOneWidget);
 
     await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
     expect(find.text('Find the right truck.'), findsOneWidget);
 
     await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
     expect(find.text('Track every move.'), findsOneWidget);
     expect(find.text('Get started'), findsOneWidget);
 
     await tester.tap(find.text('Get started'));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
     expect(find.text('One app. Every\nmove.'), findsOneWidget);
 
     final preferences = await SharedPreferences.getInstance();
@@ -56,7 +64,9 @@ void main() {
     await tester.pumpWidget(const MyApp());
     expect(find.text('MAKE LOGISTICS SIMPLE'), findsOneWidget);
     await tester.pump(const Duration(seconds: 2));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
     expect(find.text('One app. Every\nmove.'), findsOneWidget);
     expect(find.text('Move anything.'), findsNothing);
   });
@@ -67,11 +77,15 @@ void main() {
 
     await tester.pumpWidget(const MyApp());
     await tester.pump(const Duration(seconds: 2));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
     expect(find.text('Move anything.'), findsOneWidget);
 
     await tester.tap(find.text('Skip'));
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
     expect(find.text('One app. Every\nmove.'), findsOneWidget);
 
     final preferences = await SharedPreferences.getInstance();

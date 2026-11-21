@@ -194,6 +194,7 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
                     borderSide: BorderSide.none,
                   ),
                 ),
+                style: AppTypography.bodyMd,
                 hint: const Text('Choose a size'),
                 items: [
                   for (final size in category.sizes)
@@ -242,6 +243,7 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
                   borderSide: BorderSide.none,
                 ),
               ),
+              style: AppTypography.bodyMd,
               items: [
                 for (var count = 0; count <= 20; count++)
                   DropdownMenuItem(value: count, child: Text('$count')),
@@ -261,6 +263,7 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
             DropdownButtonFormField<String>(
               initialValue: widget.draft.paymentMethod,
               decoration: const InputDecoration(labelText: 'Payment method'),
+              style: AppTypography.bodyMd,
               items: const [
                 DropdownMenuItem(value: 'cash', child: Text('Cash')),
                 DropdownMenuItem(value: 'wallet', child: Text('Wallet')),
@@ -272,6 +275,7 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
             DropdownButtonFormField<String>(
               initialValue: widget.draft.farePaidBy,
               decoration: const InputDecoration(labelText: 'Fare paid by'),
+              style: AppTypography.bodyMd,
               items: const [
                 DropdownMenuItem(value: 'sender', child: Text('Sender')),
                 DropdownMenuItem(value: 'recipient', child: Text('Recipient')),

@@ -13,11 +13,28 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _floatingController;
+  late final Animation<double> _floatingAnimation;
+
   @override
   void initState() {
     super.initState();
+    _floatingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+    _floatingAnimation = Tween<double>(begin: 0, end: -10).animate(
+      CurvedAnimation(parent: _floatingController, curve: Curves.easeInOut),
+    );
     _continueAfterSplash();
+  }
+
+  @override
+  void dispose() {
+    _floatingController.dispose();
+    super.dispose();
   }
 
   Future<void> _continueAfterSplash() async {
@@ -59,7 +76,20 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset('assets/images/app_icon.png', width: 120, height: 120),
+            AnimatedBuilder(
+              animation: _floatingAnimation,
+              builder: (context, child) {
+                return Transform.translate(
+                  offset: Offset(0, _floatingAnimation.value),
+                  child: child,
+                );
+              },
+              child: Image.asset(
+                'assets/images/app_icon.png',
+                width: 120,
+                height: 120,
+              ),
+            ),
             const SizedBox(height: 24),
             const Text(
               'Wasla',

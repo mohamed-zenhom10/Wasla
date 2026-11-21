@@ -5,6 +5,7 @@ import 'package:main/components/main_button.dart';
 import 'package:main/models/shipment.dart';
 import 'package:main/pages/tracking_shipment_stages_page.dart';
 import 'package:main/routing/app_route.dart';
+import 'package:main/screens/home_screen.dart';
 import 'package:main/services/shipment_service.dart';
 import 'package:main/theme/app_theme.dart';
 
@@ -55,6 +56,11 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
         _tracking = tracking;
         _errorMessage = null;
       });
+      if (shipment.status == 'delivered') {
+        if (mounted) {
+          context.findAncestorStateOfType<HomeScreenState>()?.resetLocationSelection();
+        }
+      }
       final terminal = shipment.status == 'delivered' ||
           shipment.status == 'cancelled' ||
           shipment.trip == null && shipment.status == 'searching_driver';

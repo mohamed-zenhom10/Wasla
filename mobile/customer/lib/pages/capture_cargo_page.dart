@@ -422,16 +422,16 @@ class _CaptureCargoPageState extends State<CaptureCargoPage> {
           ),
           Row(
             children: [
-              Expanded(child: Text(photo.fileName, maxLines: 1)),
+              const Spacer(),
               IconButton(
-                tooltip: 'Retake photo',
+                tooltip: 'Re-upload photo',
                 onPressed: _isSubmitting
                     ? null
                     : () => _capturePhoto(replaceIndex: index),
                 icon: const Icon(Icons.refresh),
               ),
               IconButton(
-                tooltip: 'Remove photo',
+                tooltip: 'Delete photo',
                 onPressed: _isSubmitting
                     ? null
                     : () => setState(() => widget.draft.photos.removeAt(index)),

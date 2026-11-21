@@ -287,8 +287,8 @@ class CargoOptionCard extends StatelessWidget {
                     title,
                     style: const TextStyle(
                       color: AppColors.darkGreen,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: 3),

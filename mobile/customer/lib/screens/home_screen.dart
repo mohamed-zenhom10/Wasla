@@ -41,7 +41,6 @@ class HomeScreenState extends State<HomeScreen> {
     _destinationController.clear();
     _pickupPoint = null;
     _destinationPoint = null;
-    _useAiEstimate = false;
     if (mounted) setState(() {});
   }
 

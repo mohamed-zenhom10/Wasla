@@ -95,6 +95,7 @@ class _YourActivityPageState extends State<YourActivityPage> {
                     decoration: const InputDecoration(
                       labelText: 'Shipment status',
                     ),
+                    style: AppTypography.bodyMd,
                     items: [
                       for (final status in _statuses)
                         DropdownMenuItem(
@@ -216,7 +217,7 @@ class _ShipmentCard extends StatelessWidget {
                 child: Text(
                   'Shipment #${item.id}',
                   style: AppTypography.bodyMd.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
