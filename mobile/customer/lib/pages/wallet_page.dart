@@ -1,9 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/app_page_header.dart';
+import 'package:main/pages/add_money_page.dart';
+import 'package:main/pages/payment_methods_page.dart';
+import 'package:main/pages/wallet_transactions_page.dart';
+import 'package:main/pages/withdraw_balance_page.dart';
+import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
 
-class WalletPage extends StatelessWidget {
+class WalletPage extends StatefulWidget {
   const WalletPage({super.key});
+
+  @override
+  State<WalletPage> createState() => _WalletPageState();
+}
+
+class _WalletPageState extends State<WalletPage> {
+  final _service = WalletService();
+  bool _isLoading = true;
+  String? _error;
+  dynamic _wallet;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final wallet = await _service.getWallet();
+      if (!mounted) return;
+      setState(() => _wallet = wallet);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = WalletService.readableError(error));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -13,25 +51,95 @@ class WalletPage extends StatelessWidget {
         children: [
           const AppPageHeader(title: 'Wallet'),
           const SizedBox(height: 24),
-          const _WalletBalanceCard(),
-          const SizedBox(height: 28),
-          Row(
-            children: [
-              Expanded(
+          if (_isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (_error != null)
+            Text(_error!, style: const TextStyle(color: AppColors.accent))
+          else ...[
+            _WalletBalanceCard(wallet: _wallet),
+            const SizedBox(height: 16),
+            if (_wallet.isNegative) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF2EF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.accent),
+                ),
                 child: Text(
-                  'Transaction history',
-                  style: AppTypography.headingSm,
+                  'You owe ${_wallet.balance} EGP. Top up your wallet before creating another shipment.',
+                  style: AppTypography.bodySm,
                 ),
               ),
-              Icon(
-                Icons.receipt_long_outlined,
-                color: AppColors.darkGreen,
-                size: 22,
+              const SizedBox(height: 16),
+            ],
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(builder: (_) => const AddMoneyPage()),
+                      );
+                      if (mounted) _load();
+                    },
+                    child: const Text('Add money'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(builder: (_) => const WithdrawBalancePage()),
+                      );
+                      if (mounted) _load();
+                    },
+                    child: const Text('Withdraw balance'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const WalletTransactionsPage()),
+                );
+                if (mounted) _load();
+              },
+              child: const Text('View transactions'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const PaymentMethodsPage()),
+                );
+                if (mounted) _load();
+              },
+              child: const Text('Payment methods'),
+            ),
+            const SizedBox(height: 24),
+            if (_wallet.pendingTopups.count > 0) ...[
+              Text('Pending top-ups', style: AppTypography.headingSm),
+              const SizedBox(height: 8),
+              Text(
+                '${_wallet.pendingTopups.count} request(s) awaiting confirmation: ${_wallet.pendingTopups.amount} EGP',
+                style: AppTypography.bodyMd,
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (_wallet.pendingWithdrawal != null) ...[
+              Text('Pending withdrawal', style: AppTypography.headingSm),
+              const SizedBox(height: 8),
+              Text(
+                'Reserved: ${_wallet.pendingWithdrawal!.amount} EGP. Available: ${_wallet.available} EGP.',
+                style: AppTypography.bodyMd,
               ),
             ],
-          ),
-          const SizedBox(height: 16),
-          const _EmptyTransactionsState(),
+          ],
         ],
       ),
     );
@@ -39,7 +147,9 @@ class WalletPage extends StatelessWidget {
 }
 
 class _WalletBalanceCard extends StatelessWidget {
-  const _WalletBalanceCard();
+  const _WalletBalanceCard({required this.wallet});
+
+  final dynamic wallet;
 
   @override
   Widget build(BuildContext context) {
@@ -54,65 +164,24 @@ class _WalletBalanceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.account_balance_wallet_outlined,
-                color: AppColors.white,
-                size: 22,
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'Available balance',
-                style: AppTypography.bodySm.copyWith(color: AppColors.white),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
           Text(
-            'Unavailable',
+            'Available balance',
+            style: AppTypography.bodySm.copyWith(color: AppColors.white),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${wallet.available} EGP',
             style: AppTypography.headingSm.copyWith(color: AppColors.white),
           ),
           const SizedBox(height: 8),
           Text(
-            'Wallet balance is not provided by the current service.',
-            style: AppTypography.bodyXs.copyWith(
-              color: AppColors.white.withValues(alpha: 0.78),
-            ),
+            'Balance: ${wallet.balance} EGP',
+            style: AppTypography.bodyXs.copyWith(color: AppColors.white.withValues(alpha: 0.78)),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyTransactionsState extends StatelessWidget {
-  const _EmptyTransactionsState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: Column(
-        children: [
-          const Icon(
-            Icons.receipt_long_outlined,
-            color: AppColors.gray,
-            size: 34,
-          ),
-          const SizedBox(height: 12),
-          Text('No transactions yet', style: AppTypography.bodyMd),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
-            'Your deposits, payments, and refunds will appear here.',
-            textAlign: TextAlign.center,
-            style: AppTypography.bodyXs.copyWith(color: AppColors.gray),
+            'Top-up method: InstaPay',
+            style: AppTypography.bodyXs.copyWith(color: AppColors.white.withValues(alpha: 0.78)),
           ),
         ],
       ),

@@ -10,7 +10,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart' as http_testing;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:main/services/auth_service.dart';
 
 import 'package:main/main.dart';
 import 'package:main/screens/home_screen.dart';
@@ -20,6 +23,31 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
+    AuthService.replaceHttpClientForTesting(
+      http_testing.MockClient((request) async {
+        if (request.url.path.endsWith('/me/wallet')) {
+          return http.Response(
+            jsonEncode({
+              'wallet': {
+                'balance': '370.00',
+                'available': '370.00',
+                'pendingTopups': {'count': 0, 'amount': '0.00'},
+                'pendingWithdrawal': null,
+                'defaultPaymentMethod': 'wallet',
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path.endsWith('/me/wallet/transactions')) {
+          return http.Response(
+            jsonEncode({'transactions': [], 'page': 1, 'hasMore': false}),
+            200,
+          );
+        }
+        return http.Response('{}', 200);
+      }),
+    );
   });
 
   testWidgets('completing onboarding persists and skips it next launch', (
@@ -141,6 +169,10 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(320, 568));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
+    FlutterSecureStorage.setMockInitialValues({
+      'wasla_auth_token': 'test-token',
+    });
+
     await tester.pumpWidget(
       const MaterialApp(home: HomeScreen(isPreview: true)),
     );
@@ -163,6 +195,10 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
+    FlutterSecureStorage.setMockInitialValues({
+      'wasla_auth_token': 'test-token',
+    });
+
     await tester.pumpWidget(
       const MaterialApp(home: HomeScreen(isPreview: true)),
     );
@@ -178,7 +214,6 @@ void main() {
     await tester.tap(find.text('Wallet').first);
     await tester.pumpAndSettle();
     expect(find.text('Available balance'), findsOneWidget);
-    expect(find.text('No transactions yet'), findsOneWidget);
     expect(tester.widget<BottomNavigationBar>(navigation).currentIndex, 3);
 
     await tester.tap(find.text('Profile').first);
@@ -236,7 +271,7 @@ void main() {
           'Saved locations',
           'No saved locations are available in your account.',
         ),
-        ('Payment methods', 'No payment methods are available.'),
+        ('Payment methods', 'Payment Methods'),
         ('Notifications', 'No notifications yet'),
         ('Safety', 'Every move, protected'),
         ('Help Center', 'How can we help?'),

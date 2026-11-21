@@ -496,11 +496,17 @@ class ShipmentCatalog {
     required this.categories,
     required this.vehicleTypes,
     required this.minScheduleLeadMinutes,
+    this.companyInstapayHandle,
+    this.minTopupAmount,
+    this.maxTopupAmount,
   });
 
   final List<ShipmentCargoCategory> categories;
   final List<ShipmentVehicleType> vehicleTypes;
   final int minScheduleLeadMinutes;
+  final String? companyInstapayHandle;
+  final double? minTopupAmount;
+  final double? maxTopupAmount;
 
   factory ShipmentCatalog.fromJson(Map<String, dynamic> json) {
     final settings = json['settings'];
@@ -522,6 +528,15 @@ class ShipmentCatalog {
       minScheduleLeadMinutes: settings is Map
           ? (settings['minScheduleLeadMinutes'] as num?)?.toInt() ?? 30
           : 30,
+      companyInstapayHandle: settings is Map
+          ? settings['companyInstapayHandle']?.toString()
+          : null,
+      minTopupAmount: settings is Map
+          ? (settings['minTopupAmount'] as num?)?.toDouble()
+          : null,
+      maxTopupAmount: settings is Map
+          ? (settings['maxTopupAmount'] as num?)?.toDouble()
+          : null,
     );
   }
 }

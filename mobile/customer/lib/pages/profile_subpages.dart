@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
+import 'package:main/pages/payment_methods_page.dart';
 import 'package:main/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -113,12 +114,7 @@ class _ProfileSubpageState extends State<ProfileSubpage> {
       detail: 'Saved addresses can be used as pickup or drop-off points.',
       action: 'Add location',
     ),
-    ProfileDestination.paymentMethods => _emptyFeature(
-      icon: Icons.credit_card_outlined,
-      message: 'No payment methods are available.',
-      detail: 'Payment methods are not connected to an account service yet.',
-      action: 'Add payment method',
-    ),
+    ProfileDestination.paymentMethods => const PaymentMethodsPage(),
     ProfileDestination.notifications => _emptyFeature(
       icon: Icons.notifications_none,
       message: 'No notifications yet',
