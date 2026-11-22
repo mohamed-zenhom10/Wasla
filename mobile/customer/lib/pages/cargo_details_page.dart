@@ -3,7 +3,9 @@ import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:phone_numbers_parser/phone_numbers_parser.dart';
 import 'package:main/components/cargo_components.dart';
+import 'package:main/models/shipment.dart';
 import 'package:main/pages/capture_cargo_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/services/international_phone_number.dart';
 import 'package:main/theme/app_theme.dart';
@@ -27,6 +29,12 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
   IsoCode _recipientPhoneCountry = IsoCode.EG;
   bool _isScheduled = false;
   DateTime? _scheduledAt;
+  String _language = 'en';
+
+  bool get _isArabic {
+    final normalized = _language.trim().toLowerCase();
+    return normalized.contains('عرب') || normalized.contains('arabic');
+  }
 
   @override
   void initState() {
@@ -64,6 +72,18 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
             minutes: (widget.draft.catalog?.minScheduleLeadMinutes ?? 30) + 5,
           ),
         );
+    _loadLanguage();
+  }
+
+  Future<void> _loadLanguage() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final savedLanguage = preferences.getString('profile_language');
+      if (!mounted) return;
+      if (savedLanguage != null && savedLanguage.trim().isNotEmpty) {
+        setState(() => _language = savedLanguage.trim());
+      }
+    } catch (_) {}
   }
 
   @override
@@ -104,9 +124,11 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final category = widget.draft.catalog?.categories
-        .where((item) => item.id == widget.draft.categoryId)
-        .firstOrNull;
+    final sizeOptions = widget.draft.catalog?.activeCategories
+            .where((item) => item.id == widget.draft.categoryId)
+            .firstOrNull
+            ?.activeSizes ??
+        const <ShipmentSizeOption>[];
     return CargoPageScaffold(
       title: 'Tell us about your cargo',
       step: 3,
@@ -176,11 +198,11 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
               },
             ),
             const SizedBox(height: 18),
-            if (category?.sizes.isNotEmpty == true) ...[
+            if (sizeOptions.isNotEmpty) ...[
               const CargoSectionLabel('Approximate cargo size'),
               DropdownButtonFormField<String>(
                 initialValue:
-                    category!.sizes.any(
+                    sizeOptions.any(
                       (size) => size.id == widget.draft.sizeOptionId,
                     )
                     ? widget.draft.sizeOptionId
@@ -197,17 +219,20 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
                 style: AppTypography.bodyMd,
                 hint: const Text('Choose a size'),
                 items: [
-                  for (final size in category.sizes)
-                    DropdownMenuItem(value: size.id, child: Text(size.nameEn)),
+                  for (final size in sizeOptions)
+                    DropdownMenuItem(
+                      value: size.id,
+                      child: Text(size.displayName(_isArabic ? 'ar' : 'en')),
+                    ),
                 ],
                 onChanged: (value) => setState(() {
                   widget.draft
                     ..sizeOptionId = value
                     ..size =
-                        category.sizes
+                        sizeOptions
                             .where((size) => size.id == value)
                             .firstOrNull
-                            ?.nameEn ??
+                            ?.displayName(_isArabic ? 'ar' : 'en') ??
                         '';
                   widget.draft.fieldErrors.remove('sizeOptionId');
                 }),

@@ -217,20 +217,24 @@ class _CaptureCargoPageState extends State<CaptureCargoPage> {
     if (draft.sizeOptionId != shipment.sizeOptionId) {
       changes['sizeOptionId'] = draft.sizeOptionId;
     }
-    if (draft.description.trim() != shipment.cargoDescription) {
+    if (draft.description.trim() != (shipment.cargoDescription ?? '')) {
       changes['cargoDescription'] = draft.description.trim();
     }
-    if (draft.itemCount != shipment.itemCount) {
+    final existingItemCount = shipment.itemCount;
+    if (existingItemCount == null || draft.itemCount != existingItemCount) {
       changes['itemCount'] = draft.itemCount;
     }
-    if (draft.isFragile != shipment.isFragile) {
+    if (draft.isFragile != (shipment.isFragile ?? false)) {
       changes['isFragile'] = draft.isFragile;
     }
     if (draft.weightKg != shipment.weightKg) {
       changes['weightKg'] = draft.weightKg;
     }
-    if (draft.helpersCount != shipment.helpersCount) {
+    if (draft.helpersCount != (shipment.helpersCount ?? 0)) {
       changes['helpersCount'] = draft.helpersCount;
+    }
+    if (draft.requestedVehicleTypeId != shipment.requestedVehicleTypeId) {
+      changes['requestedVehicleTypeId'] = draft.requestedVehicleTypeId;
     }
     if (draft.pickup != shipment.pickup?.address ||
         draft.pickupLatitude != shipment.pickup?.latitude ||

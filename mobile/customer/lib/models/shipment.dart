@@ -30,6 +30,33 @@ class ShipmentLocation {
       );
 }
 
+class ShipmentZone {
+  const ShipmentZone({
+    required this.id,
+    required this.cityId,
+    required this.code,
+    required this.nameEn,
+    this.nameAr,
+    this.isActive = true,
+  });
+
+  final String id;
+  final String cityId;
+  final String code;
+  final String nameEn;
+  final String? nameAr;
+  final bool isActive;
+
+  factory ShipmentZone.fromJson(Map<String, dynamic> json) => ShipmentZone(
+    id: json['id']?.toString() ?? '',
+    cityId: json['cityId']?.toString() ?? '',
+    code: json['code']?.toString() ?? '',
+    nameEn: json['nameEn']?.toString() ?? '',
+    nameAr: json['nameAr']?.toString(),
+    isActive: json['isActive'] as bool? ?? true,
+  );
+}
+
 class ShipmentPhoto {
   const ShipmentPhoto({required this.id, required this.url, this.uploadedAt});
 
@@ -415,6 +442,8 @@ class ShipmentSizeOption {
     this.nameAr,
     this.code,
     this.approxVolumeM3,
+    this.sortOrder,
+    this.isActive = true,
   });
 
   final String id;
@@ -423,6 +452,17 @@ class ShipmentSizeOption {
   final String? nameAr;
   final String? code;
   final double? approxVolumeM3;
+  final int? sortOrder;
+  final bool isActive;
+
+  String displayName(String language) {
+    final normalized = language.trim().toLowerCase();
+    if (normalized == 'ar') {
+      final arabic = nameAr?.trim();
+      if (arabic != null && arabic.isNotEmpty) return arabic;
+    }
+    return nameEn;
+  }
 
   factory ShipmentSizeOption.fromJson(Map<String, dynamic> json) =>
       ShipmentSizeOption(
@@ -432,6 +472,8 @@ class ShipmentSizeOption {
         nameAr: json['nameAr']?.toString(),
         code: json['code']?.toString(),
         approxVolumeM3: (json['approxVolumeM3'] as num?)?.toDouble(),
+        sortOrder: (json['sortOrder'] as num?)?.toInt(),
+        isActive: json['isActive'] as bool? ?? true,
       );
 }
 
@@ -441,6 +483,8 @@ class ShipmentCargoCategory {
     required this.nameEn,
     this.nameAr,
     this.code,
+    this.sortOrder,
+    this.isActive = true,
     this.sizes = const [],
   });
 
@@ -448,7 +492,27 @@ class ShipmentCargoCategory {
   final String nameEn;
   final String? nameAr;
   final String? code;
+  final int? sortOrder;
+  final bool isActive;
   final List<ShipmentSizeOption> sizes;
+
+  String displayName(String language) {
+    final normalized = language.trim().toLowerCase();
+    if (normalized == 'ar') {
+      final arabic = nameAr?.trim();
+      if (arabic != null && arabic.isNotEmpty) return arabic;
+    }
+    return nameEn;
+  }
+
+  List<ShipmentSizeOption> get activeSizes {
+    final active = sizes.where((size) => size.isActive).toList();
+    active.sort(
+      (a, b) =>
+          (a.sortOrder ?? 0).compareTo(b.sortOrder ?? 0),
+    );
+    return active;
+  }
 
   factory ShipmentCargoCategory.fromJson(Map<String, dynamic> json) =>
       ShipmentCargoCategory(
@@ -456,6 +520,8 @@ class ShipmentCargoCategory {
         nameEn: json['nameEn']?.toString() ?? '',
         nameAr: json['nameAr']?.toString(),
         code: json['code']?.toString(),
+        sortOrder: (json['sortOrder'] as num?)?.toInt(),
+        isActive: json['isActive'] as bool? ?? true,
         sizes: (json['sizes'] as List? ?? const [])
             .whereType<Map>()
             .map(
@@ -473,6 +539,19 @@ class ShipmentVehicleType {
     this.nameAr,
     this.code,
     this.imageUrl,
+    this.maxPayloadKg,
+    this.cargoVolumeM3,
+    this.bedLengthM,
+    this.bedWidthM,
+    this.bedHeightM,
+    this.suitableForAr,
+    this.suitableForEn,
+    this.baseFare,
+    this.perKmRate,
+    this.helperFee,
+    this.minLicenseCategory,
+    this.isActive = true,
+    this.sortOrder,
   });
 
   final String id;
@@ -480,6 +559,28 @@ class ShipmentVehicleType {
   final String? nameAr;
   final String? code;
   final String? imageUrl;
+  final double? maxPayloadKg;
+  final double? cargoVolumeM3;
+  final double? bedLengthM;
+  final double? bedWidthM;
+  final double? bedHeightM;
+  final String? suitableForAr;
+  final String? suitableForEn;
+  final String? baseFare;
+  final String? perKmRate;
+  final String? helperFee;
+  final String? minLicenseCategory;
+  final bool isActive;
+  final int? sortOrder;
+
+  String displayName(String language) {
+    final normalized = language.trim().toLowerCase();
+    if (normalized == 'ar') {
+      final arabic = nameAr?.trim();
+      if (arabic != null && arabic.isNotEmpty) return arabic;
+    }
+    return nameEn;
+  }
 
   factory ShipmentVehicleType.fromJson(Map<String, dynamic> json) =>
       ShipmentVehicleType(
@@ -488,6 +589,19 @@ class ShipmentVehicleType {
         nameAr: json['nameAr']?.toString(),
         code: json['code']?.toString(),
         imageUrl: json['imageUrl']?.toString(),
+        maxPayloadKg: (json['maxPayloadKg'] as num?)?.toDouble(),
+        cargoVolumeM3: (json['cargoVolumeM3'] as num?)?.toDouble(),
+        bedLengthM: (json['bedLengthM'] as num?)?.toDouble(),
+        bedWidthM: (json['bedWidthM'] as num?)?.toDouble(),
+        bedHeightM: (json['bedHeightM'] as num?)?.toDouble(),
+        suitableForAr: json['suitableForAr']?.toString(),
+        suitableForEn: json['suitableForEn']?.toString(),
+        baseFare: json['baseFare']?.toString(),
+        perKmRate: json['perKmRate']?.toString(),
+        helperFee: json['helperFee']?.toString(),
+        minLicenseCategory: json['minLicenseCategory']?.toString(),
+        isActive: json['isActive'] as bool? ?? true,
+        sortOrder: (json['sortOrder'] as num?)?.toInt(),
       );
 }
 
@@ -499,17 +613,48 @@ class ShipmentCatalog {
     this.companyInstapayHandle,
     this.minTopupAmount,
     this.maxTopupAmount,
+    this.commissionRate,
+    this.cancellationFee,
+    this.groupDiscountPct,
+    this.maxGroupStops,
+    this.minDriverAge,
+    this.driverPayoutWeekday,
+    this.cities = const [],
+    this.reviewTags = const [],
   });
 
   final List<ShipmentCargoCategory> categories;
   final List<ShipmentVehicleType> vehicleTypes;
+  final List<ShipmentCatalogCity> cities;
+  final List<ShipmentReviewTag> reviewTags;
   final int minScheduleLeadMinutes;
   final String? companyInstapayHandle;
   final double? minTopupAmount;
   final double? maxTopupAmount;
+  final double? commissionRate;
+  final String? cancellationFee;
+  final double? groupDiscountPct;
+  final int? maxGroupStops;
+  final int? minDriverAge;
+  final int? driverPayoutWeekday;
+
+  List<ShipmentCargoCategory> get activeCategories {
+    final active = categories.where((item) => item.isActive).toList();
+    active.sort((a, b) => (a.sortOrder ?? 0).compareTo(b.sortOrder ?? 0));
+    return active;
+  }
+
+  List<ShipmentVehicleType> get activeVehicleTypes {
+    final active = vehicleTypes.where((item) => item.isActive).toList();
+    active.sort((a, b) => (a.sortOrder ?? 0).compareTo(b.sortOrder ?? 0));
+    return active;
+  }
 
   factory ShipmentCatalog.fromJson(Map<String, dynamic> json) {
     final settings = json['settings'];
+    final settingsMap = settings is Map
+        ? Map<String, dynamic>.from(settings)
+        : <String, dynamic>{};
     return ShipmentCatalog(
       categories: (json['cargoCategories'] as List? ?? const [])
           .whereType<Map>()
@@ -525,20 +670,107 @@ class ShipmentCatalog {
                 ShipmentVehicleType.fromJson(Map<String, dynamic>.from(item)),
           )
           .toList(),
-      minScheduleLeadMinutes: settings is Map
-          ? (settings['minScheduleLeadMinutes'] as num?)?.toInt() ?? 30
-          : 30,
-      companyInstapayHandle: settings is Map
-          ? settings['companyInstapayHandle']?.toString()
-          : null,
-      minTopupAmount: settings is Map
-          ? (settings['minTopupAmount'] as num?)?.toDouble()
-          : null,
-      maxTopupAmount: settings is Map
-          ? (settings['maxTopupAmount'] as num?)?.toDouble()
-          : null,
+      cities: (json['cities'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) =>
+                ShipmentCatalogCity.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList(),
+      reviewTags: (json['reviewTags'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (item) =>
+                ShipmentReviewTag.fromJson(Map<String, dynamic>.from(item)),
+          )
+          .toList(),
+      minScheduleLeadMinutes: (settingsMap['minScheduleLeadMinutes'] as num?)
+              ?.toInt() ??
+          30,
+      companyInstapayHandle: settingsMap['companyInstapayHandle']?.toString(),
+      minTopupAmount: _asDouble(settingsMap['minTopupAmount']),
+      maxTopupAmount: _asDouble(settingsMap['maxTopupAmount']),
+      commissionRate: _asDouble(settingsMap['commissionRate']),
+      cancellationFee: settingsMap['cancellationFee']?.toString(),
+      groupDiscountPct: _asDouble(settingsMap['groupDiscountPct']),
+      maxGroupStops: (settingsMap['maxGroupStops'] as num?)?.toInt(),
+      minDriverAge: (settingsMap['minDriverAge'] as num?)?.toInt(),
+      driverPayoutWeekday: (settingsMap['driverPayoutWeekday'] as num?)?.toInt(),
     );
   }
+
+  static double? _asDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final parsed = double.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+}
+
+class ShipmentCatalogCity {
+  const ShipmentCatalogCity({
+    required this.id,
+    required this.code,
+    required this.nameEn,
+    this.nameAr,
+    this.isActive = true,
+    this.zones = const [],
+  });
+
+  final String id;
+  final String code;
+  final String nameEn;
+  final String? nameAr;
+  final bool isActive;
+  final List<ShipmentZone> zones;
+
+  factory ShipmentCatalogCity.fromJson(Map<String, dynamic> json) =>
+      ShipmentCatalogCity(
+        id: json['id']?.toString() ?? '',
+        code: json['code']?.toString() ?? '',
+        nameEn: json['nameEn']?.toString() ?? '',
+        nameAr: json['nameAr']?.toString(),
+        isActive: json['isActive'] as bool? ?? true,
+        zones: (json['zones'] as List? ?? const [])
+            .whereType<Map>()
+            .map(
+              (item) => ShipmentZone.fromJson(Map<String, dynamic>.from(item)),
+            )
+            .toList(),
+      );
+}
+
+class ShipmentReviewTag {
+  const ShipmentReviewTag({
+    required this.id,
+    required this.code,
+    required this.nameEn,
+    this.nameAr,
+    this.sentiment,
+    this.direction,
+    this.isActive = true,
+  });
+
+  final String id;
+  final String code;
+  final String nameEn;
+  final String? nameAr;
+  final String? sentiment;
+  final String? direction;
+  final bool isActive;
+
+  factory ShipmentReviewTag.fromJson(Map<String, dynamic> json) =>
+      ShipmentReviewTag(
+        id: json['id']?.toString() ?? '',
+        code: json['code']?.toString() ?? '',
+        nameEn: json['nameEn']?.toString() ?? '',
+        nameAr: json['nameAr']?.toString(),
+        sentiment: json['sentiment']?.toString(),
+        direction: json['direction']?.toString(),
+        isActive: json['isActive'] as bool? ?? true,
+      );
 }
 class ShipmentTracking {
   const ShipmentTracking({

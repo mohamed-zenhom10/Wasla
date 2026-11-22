@@ -6,6 +6,7 @@ import 'package:main/pages/cargo_category_page.dart';
 import 'package:main/screens/home_screen.dart';
 import 'package:main/pages/vehicle_small_page.dart';
 import 'package:main/services/cargo_order_service.dart';
+import 'package:main/services/language_service.dart';
 import 'package:main/services/shipment_service.dart';
 import 'package:main/theme/app_theme.dart';
 
@@ -118,20 +119,22 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
   Future<void> _editDraft(Shipment shipment) async {
     try {
       final catalog = await _service.getCatalog();
-      final category = catalog.categories
+      final category = catalog.activeCategories
           .where((item) => item.id == shipment.cargoCategoryId)
           .firstOrNull;
       final draft = CargoOrderDraft()
         ..catalog = catalog
         ..shipment = shipment
         ..categoryId = shipment.cargoCategoryId
-        ..category = category?.nameEn ?? ''
+        ..category = category == null ? '' : LanguageService.displayName(category.nameAr, category.nameEn)
         ..sizeOptionId = shipment.sizeOptionId
+        ..size = category == null ? '' : LanguageService.displayName(category.nameAr, category.nameEn)
         ..description = shipment.cargoDescription ?? ''
         ..itemCount = shipment.itemCount ?? 1
         ..isFragile = shipment.isFragile ?? false
         ..weightKg = shipment.weightKg
         ..helpersCount = shipment.helpersCount ?? 0
+        ..requestedVehicleTypeId = shipment.requestedVehicleTypeId
         ..pickup = shipment.pickup?.address ?? ''
         ..pickupLatitude = shipment.pickup?.latitude
         ..pickupLongitude = shipment.pickup?.longitude
@@ -146,6 +149,7 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
         ..farePaidBy = shipment.farePaidBy ?? 'sender'
         ..recipientName = shipment.recipientName ?? ''
         ..recipientPhone = shipment.recipientPhone ?? '';
+      draft.fieldErrors.clear();
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -262,7 +266,9 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
                   ]),
                 ],
                 const SizedBox(height: 18),
-                if (!widget.readOnly && shipment.acceptedQuote != null) ...[
+                if (!widget.readOnly &&
+                    shipment.status != 'cancelled' &&
+                    shipment.acceptedQuote != null) ...[
                   if (shipment.status != 'searching_driver' &&
                       shipment.status != 'driver_assigned' &&
                       shipment.status != 'in_progress' &&
@@ -281,7 +287,9 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
                     isLoading: _isLoading,
                     onPressed: _isLoading ? null : _withdrawPrice,
                   ),
-                ] else if (!widget.readOnly && shipment.isEditable) ...[
+                ] else if (!widget.readOnly &&
+                    shipment.status != 'cancelled' &&
+                    shipment.isEditable) ...[
                   WaslaButton(
                     text: 'Edit draft shipment',
                     variant: WaslaButtonVariant.primary,
@@ -303,25 +311,29 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
   Future<void> _requestQuotes() async {
     final shipment = _shipment;
     if (shipment == null || _isLoading) return;
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
       final catalog = await _service.getCatalog();
       final updatedShipment = await _service.requestQuotes(shipment);
       _shipment = updatedShipment;
-      final category = catalog.categories
+      final category = catalog.activeCategories
           .where((item) => item.id == updatedShipment.cargoCategoryId)
           .firstOrNull;
       final draft = CargoOrderDraft()
         ..catalog = catalog
         ..shipment = updatedShipment
         ..categoryId = updatedShipment.cargoCategoryId
-        ..category = category?.nameEn ?? ''
+        ..category = category == null ? '' : LanguageService.displayName(category.nameAr, category.nameEn)
         ..sizeOptionId = updatedShipment.sizeOptionId
         ..description = updatedShipment.cargoDescription ?? ''
         ..itemCount = updatedShipment.itemCount ?? 1
         ..isFragile = updatedShipment.isFragile ?? false
         ..weightKg = updatedShipment.weightKg
         ..helpersCount = updatedShipment.helpersCount ?? 0
+        ..requestedVehicleTypeId = updatedShipment.requestedVehicleTypeId
         ..pickup = updatedShipment.pickup?.address ?? ''
         ..pickupLatitude = updatedShipment.pickup?.latitude
         ..pickupLongitude = updatedShipment.pickup?.longitude
@@ -343,7 +355,9 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
         ),
       );
     } on ShipmentApiException catch (error) {
-      _errorMessage = error.message;
+      if (mounted) setState(() => _errorMessage = error.message);
+    } catch (error) {
+      if (mounted) setState(() => _errorMessage = 'The quotes could not be requested. ${error.toString()}');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

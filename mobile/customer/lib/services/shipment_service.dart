@@ -23,13 +23,52 @@ class ShipmentApiException implements Exception {
 }
 
 class ShipmentService {
-  Future<ShipmentCatalog> getCatalog() async {
+  Future<ShipmentCatalog>? _catalogFuture;
+
+  Future<ShipmentCatalog> getCatalog() {
+    return _catalogFuture ??= _fetchCatalog();
+  }
+
+  Future<void> clearCatalogCache() async {
+    _catalogFuture = null;
+  }
+
+  Future<ShipmentCatalog> _fetchCatalog() async {
     final response = await _request(
       method: 'GET',
       endpoint: '/catalog',
       authenticated: false,
     );
     return ShipmentCatalog.fromJson(response);
+  }
+
+  Future<ShipmentZone?> getZone({
+    required double lat,
+    required double lng,
+  }) async {
+    if (lat < -90 || lat > 90) {
+      throw const ShipmentApiException(
+        code: 'INVALID_INPUT',
+        message: 'Latitude must be between -90 and 90.',
+      );
+    }
+    if (lng < -180 || lng > 180) {
+      throw const ShipmentApiException(
+        code: 'INVALID_INPUT',
+        message: 'Longitude must be between -180 and 180.',
+      );
+    }
+    final response = await _request(
+      method: 'GET',
+      endpoint: '/catalog/zone',
+      authenticated: false,
+      query: {'lat': lat.toString(), 'lng': lng.toString()},
+    );
+    final zone = response['zone'];
+    if (zone is Map) {
+      return ShipmentZone.fromJson(Map<String, dynamic>.from(zone));
+    }
+    return null;
   }
 
   Future<Shipment> createDraft({

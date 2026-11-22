@@ -3,6 +3,7 @@ import 'package:main/components/main_button.dart';
 import 'package:main/models/shipment.dart';
 import 'package:main/pages/shipment_details_page.dart';
 import 'package:main/services/cargo_order_service.dart';
+import 'package:main/services/language_service.dart';
 import 'package:main/services/shipment_service.dart';
 import 'package:main/theme/app_theme.dart';
 
@@ -30,7 +31,7 @@ class _VehiclesSmallPageState extends State<VehiclesSmallPage> {
         in catalog?.vehicleTypes ?? const <ShipmentVehicleType>[]) {
       if (vehicle.id == id) {
         return vehicle.nameEn.isNotEmpty
-            ? vehicle.nameEn
+            ? LanguageService.displayName(vehicle.nameAr, vehicle.nameEn)
             : vehicle.code ?? 'Vehicle';
       }
     }

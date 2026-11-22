@@ -5,6 +5,7 @@ import 'package:main/pages/drop_off_location_page.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/services/shipment_service.dart';
 import 'package:main/theme/app_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class CargoCategoryPage extends StatefulWidget {
   const CargoCategoryPage({super.key, required this.draft});
@@ -18,12 +19,33 @@ class CargoCategoryPage extends StatefulWidget {
 class _CargoCategoryPageState extends State<CargoCategoryPage> {
   final _service = ShipmentService();
   late Future<ShipmentCatalog> _catalog;
+  String _language = 'en';
 
   @override
   void initState() {
     super.initState();
     _catalog = _loadCatalog();
+    _loadLanguage();
   }
+
+  Future<void> _loadLanguage() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final savedLanguage = preferences.getString('profile_language');
+      if (!mounted) return;
+      if (savedLanguage != null && savedLanguage.trim().isNotEmpty) {
+        setState(() => _language = savedLanguage.trim());
+      }
+    } catch (_) {}
+  }
+
+  bool get _isArabic {
+    final normalized = _language.trim().toLowerCase();
+    return normalized.contains('عرب') || normalized.contains('arabic');
+  }
+
+  String _displayName(ShipmentCargoCategory category) =>
+      category.displayName(_isArabic ? 'ar' : 'en');
 
   Future<ShipmentCatalog> _loadCatalog() async {
     final catalog = await _service.getCatalog();
@@ -62,7 +84,7 @@ class _CargoCategoryPageState extends State<CargoCategoryPage> {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        final categories = snapshot.data!.categories;
+        final categories = snapshot.data!.activeCategories;
         if (categories.isEmpty) {
           return CargoPageScaffold(
             title: 'What are you moving?',
@@ -95,15 +117,15 @@ class _CargoCategoryPageState extends State<CargoCategoryPage> {
               const SizedBox(height: 20),
               for (final category in categories) ...[
                 CargoOptionCard(
-                  title: category.nameEn,
-                  subtitle: category.sizes.isEmpty
+                  title: _displayName(category),
+                  subtitle: category.activeSizes.isEmpty
                       ? 'Choose this category'
-                      : '${category.sizes.length} size options',
+                      : '${category.activeSizes.length} size options',
                   icon: _iconForCategory(category),
                   selected: widget.draft.categoryId == category.id,
                   onTap: () => setState(() {
                     widget.draft
-                      ..category = category.nameEn
+                      ..category = _displayName(category)
                       ..categoryId = category.id
                       ..sizeOptionId = null;
                     widget.draft.fieldErrors.remove('cargoCategoryId');

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:main/components/app_page_header.dart';
 import 'package:main/components/main_button.dart';
+import 'package:main/models/shipment.dart';
 import 'package:main/pages/cargo_category_page.dart';
 import 'package:main/pages/location_picker_page.dart';
 import 'package:main/pages/messages_page.dart';
@@ -10,6 +11,7 @@ import 'package:main/pages/your_activity_page.dart';
 import 'package:main/pages/wallet_page.dart';
 import 'package:main/services/auth_service.dart';
 import 'package:main/services/cargo_order_service.dart';
+import 'package:main/services/shipment_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -25,6 +27,8 @@ class HomeScreen extends StatefulWidget {
 class HomeScreenState extends State<HomeScreen> {
   final _pickupController = TextEditingController();
   final _destinationController = TextEditingController();
+  final ShipmentService _service = ShipmentService();
+  ShipmentCatalog? _catalog;
   int _selectedTab = 0;
   String? _customerName;
   LatLng? _pickupPoint;
@@ -56,12 +60,22 @@ class HomeScreenState extends State<HomeScreen> {
     super.initState();
     _selectedTab = widget.initialTab.clamp(0, _tabNames.length - 1);
     if (!widget.isPreview) _loadCustomerName();
+    _loadCatalog();
   }
 
   Future<void> _loadCustomerName() async {
     final session = await AuthService.loadSession();
     if (!mounted) return;
     setState(() => _customerName = session?.fullName);
+  }
+
+  Future<void> _loadCatalog() async {
+    try {
+      final catalog = await _service.getCatalog();
+      if (mounted) setState(() => _catalog = catalog);
+    } catch (error) {
+      if (mounted) setState(() => _catalog = null);
+    }
   }
 
   void setTab(int index) {
@@ -111,7 +125,8 @@ class HomeScreenState extends State<HomeScreen> {
       ..pickupLongitude = _pickupPoint?.longitude
       ..dropoffLatitude = _destinationPoint?.latitude
       ..dropoffLongitude = _destinationPoint?.longitude
-      ..useAiEstimate = useAiEstimate;
+      ..useAiEstimate = useAiEstimate
+      ..catalog = _catalog;
     setState(() => _activeBookingDraft = draft);
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
