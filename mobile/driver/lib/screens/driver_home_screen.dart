@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:driver/components/driver_components.dart';
+import 'package:driver/components/driver_navigation_map.dart';
 import 'package:driver/components/driver_session.dart';
 import 'package:driver/data/driver_api.dart';
 import 'package:driver/data/driver_location.dart';
 import 'package:driver/screens/arriving_screen.dart';
 import 'package:driver/screens/cargo_loaded_screen.dart';
+import 'package:driver/screens/driver_route_planner_screen.dart';
 import 'package:driver/screens/proof_of_delivery_screen.dart';
 import 'package:driver/screens/requests_list_screen.dart';
 import 'package:driver/theme/app_theme.dart';
@@ -229,6 +231,26 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     _DriverStats(status: _status),
                     const SizedBox(height: 16),
                     DriverMapPreview(isOnline: _isOnline),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const DriverRoutePlannerScreen(),
+                        ),
+                      ),
+                      icon: const Icon(Icons.route_outlined),
+                      label: const Text('خطط مشوارك'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.ink,
+                        side: BorderSide(
+                          color: AppColors.ink.withValues(alpha: 0.18),
+                        ),
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
                     if (_isOnline) ...[
                       const SizedBox(height: 16),
                       _RequestCard(
@@ -427,198 +449,6 @@ class _DriverStats extends StatelessWidget {
       ],
     );
   }
-}
-
-class DriverMapPreview extends StatelessWidget {
-  const DriverMapPreview({super.key, this.height = 272, this.isOnline});
-
-  final double height;
-  final bool? isOnline;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: height,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Stack(
-          children: [
-            const Positioned.fill(child: CustomPaint(painter: _MapPainter())),
-            const Align(
-              alignment: Alignment(-0.05, -0.68),
-              child: Text(
-                'MAP PREVIEW',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-            ),
-            const Align(
-              alignment: Alignment(0.05, 0.48),
-              child: Text('ROUTE ILLUSTRATION', style: TextStyle(fontSize: 9)),
-            ),
-            Align(
-              alignment: Alignment(-0.08, -0.35),
-              child: Transform.rotate(
-                angle: -0.15,
-                child: const Text(
-                  'Not for navigation',
-                  style: TextStyle(fontSize: 10),
-                ),
-              ),
-            ),
-            Positioned(
-              top: 12,
-              right: 12,
-              child: Material(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(10),
-                child: IconButton(
-                  tooltip: 'Recenter map',
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Map tiles and turn-by-turn navigation are not connected.',
-                      ),
-                    ),
-                  ),
-                  icon: const Icon(Icons.my_location_outlined, size: 20),
-                ),
-              ),
-            ),
-            Positioned(
-              left: 28,
-              bottom: 12,
-              child: _MapLabel(
-                text: isOnline == null
-                    ? 'Illustrative map · not live'
-                    : isOnline!
-                    ? 'Location shared · map illustration'
-                    : 'Location paused · map illustration',
-              ),
-            ),
-            const Positioned(
-              left: 70,
-              top: 82,
-              child: Icon(Icons.local_shipping_outlined, size: 22),
-            ),
-            const Positioned(
-              right: 28,
-              top: 126,
-              child: Icon(Icons.local_shipping_outlined, size: 22),
-            ),
-            const Positioned(
-              left: 116,
-              bottom: 52,
-              child: Icon(Icons.local_shipping_outlined, size: 22),
-            ),
-            const Positioned(
-              right: 54,
-              bottom: 60,
-              child: Icon(Icons.location_on, color: AppColors.accent, size: 34),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MapLabel extends StatelessWidget {
-  const _MapLabel({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(text, style: const TextStyle(fontSize: 10)),
-    );
-  }
-}
-
-class _MapPainter extends CustomPainter {
-  const _MapPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final background = Paint()..color = AppColors.surface;
-    canvas.drawRect(Offset.zero & size, background);
-
-    final roads = Paint()
-      ..color = AppColors.white
-      ..strokeWidth = 13
-      ..style = PaintingStyle.stroke;
-    final curvedRoad = Path()
-      ..moveTo(size.width * 0.04, size.height * 0.03)
-      ..cubicTo(
-        size.width * 0.32,
-        size.height * 0.28,
-        size.width * 0.03,
-        size.height * 0.57,
-        size.width * 0.18,
-        size.height * 1.08,
-      );
-    canvas.drawPath(curvedRoad, roads..strokeWidth = 25);
-
-    final streetGrid = Paint()
-      ..color = AppColors.white
-      ..strokeWidth = 9
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(
-      Offset(size.width * 0.32, size.height * 0.42),
-      Offset(size.width * 1.02, size.height * 0.62),
-      streetGrid,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.30, size.height * 0.64),
-      Offset(size.width * 0.98, size.height * 0.85),
-      streetGrid,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.54, size.height * 0.32),
-      Offset(size.width * 0.40, size.height * 1.04),
-      streetGrid,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.80, size.height * 0.36),
-      Offset(size.width * 0.66, size.height * 1.04),
-      streetGrid,
-    );
-
-    final route = Paint()
-      ..color = AppColors.accent
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-    final path = Path()
-      ..moveTo(size.width * 0.20, size.height * 0.33)
-      ..lineTo(size.width * 0.48, size.height * 0.39)
-      ..lineTo(size.width * 0.40, size.height * 0.56)
-      ..lineTo(size.width * 0.82, size.height * 0.69)
-      ..lineTo(size.width * 0.70, size.height * 0.85)
-      ..lineTo(size.width * 0.89, size.height * 0.91);
-    canvas.drawPath(path, route);
-
-    final driverMarker = Paint()..color = AppColors.ink;
-    canvas.drawCircle(
-      Offset(size.width * 0.27, size.height * 0.35),
-      15,
-      driverMarker,
-    );
-    canvas.drawCircle(
-      Offset(size.width * 0.27, size.height * 0.35),
-      4,
-      Paint()..color = AppColors.white,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _MapPainter oldDelegate) => false;
 }
 
 class _RequestCard extends StatelessWidget {

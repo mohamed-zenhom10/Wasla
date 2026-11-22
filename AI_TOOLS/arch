@@ -6,6 +6,7 @@ flutter run -d edge --web-port 5173 --dart-define=NATIONAL_ID_OCR_API_KEY=K85909
 flutter run -d edge --web-port 5173 --dart-define=NATIONAL_ID_OCR_API_KEY=K8858359170701888957
 
 
+mapsAPI:6MWZcpW8yeVoxLIybxXjbz8aE8N70pUP
 
 driver_acc
 mo9462623@gmail.com

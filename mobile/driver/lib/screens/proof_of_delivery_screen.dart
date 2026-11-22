@@ -1,5 +1,6 @@
 import 'package:driver/components/driver_components.dart';
 import 'package:driver/components/driver_session.dart';
+import 'package:driver/components/driver_navigation_map.dart';
 import 'package:driver/data/driver_api.dart';
 import 'package:driver/data/driver_trip_location_reporter.dart';
 import 'package:driver/screens/delivery_success_screen.dart';
@@ -183,6 +184,8 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
     final dropoff = (_trip['dropoff'] as Map?)?['address'] ?? 'Drop-off';
     final recipient =
         (_trip['recipient'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final pickupPlace = MapPlace.fromJson(_trip['pickup'], 'Pickup');
+    final dropoffPlace = MapPlace.fromJson(_trip['dropoff'], 'Delivery');
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -206,6 +209,20 @@ class _ProofOfDeliveryScreenState extends State<ProofOfDeliveryScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: DriverNavigationMap(
+                        height: 360,
+                        trackCurrentLocation: true,
+                        showNavigationPanel: true,
+                        stageLabel: 'Stage 2 · delivery',
+                        routeRequired: !_atDropoff,
+                        destination: _atDropoff ? null : dropoffPlace,
+                        pickup: pickupPlace,
+                        dropoff: dropoffPlace,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     Text('Drop-off · $dropoff'),
                     if (recipient.isNotEmpty)
                       Text(

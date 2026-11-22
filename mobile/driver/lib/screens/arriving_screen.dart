@@ -1,10 +1,10 @@
 import 'package:driver/components/driver_components.dart';
+import 'package:driver/components/driver_navigation_map.dart';
 import 'package:driver/components/driver_session.dart';
 import 'package:driver/data/driver_api.dart';
 import 'package:driver/data/driver_location.dart';
 import 'package:driver/data/driver_trip_location_reporter.dart';
 import 'package:driver/screens/cargo_loaded_screen.dart';
-import 'package:driver/screens/driver_home_screen.dart';
 import 'package:driver/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
@@ -138,6 +138,10 @@ class _ArrivingScreenState extends State<ArrivingScreen> {
         (_trip['customer'] as Map?)?.cast<String, dynamic>() ?? const {};
     final recipient =
         (_trip['recipient'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final pickupPlace = MapPlace.fromJson(pickup, 'Pickup');
+    final dropoffPlace = MapPlace.fromJson(dropoff, 'Delivery');
+    final navigatingToPickup =
+        status == 'assigned' || status == 'heading_to_pickup';
     final buttonLabel = _busy
         ? 'Updating trip...'
         : headingToPickup
@@ -169,7 +173,19 @@ class _ArrivingScreenState extends State<ArrivingScreen> {
                       ),
                     ),
                     const SizedBox(height: 18),
-                    const DriverMapPreview(height: 288),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: DriverNavigationMap(
+                        height: 360,
+                        trackCurrentLocation: true,
+                        showNavigationPanel: true,
+                        stageLabel: 'Stage 1 · pickup',
+                        routeRequired: navigatingToPickup,
+                        destination: navigatingToPickup ? pickupPlace : null,
+                        pickup: pickupPlace,
+                        dropoff: dropoffPlace,
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     _InfoCard(
                       title: 'Pickup',

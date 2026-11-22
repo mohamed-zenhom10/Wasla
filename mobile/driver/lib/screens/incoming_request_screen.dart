@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:driver/components/driver_components.dart';
+import 'package:driver/components/driver_navigation_map.dart';
 import 'package:driver/components/driver_session.dart';
 import 'package:driver/data/driver_api.dart';
 import 'package:driver/screens/arriving_screen.dart';
-import 'package:driver/screens/driver_home_screen.dart';
 import 'package:driver/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 

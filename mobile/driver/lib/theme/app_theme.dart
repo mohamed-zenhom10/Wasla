@@ -6,7 +6,6 @@ class AppColors {
   static const ink = Color(0xFF17281E);
   static const accent = Color(0xFFEA4227);
   static const muted = Color(0xFF68736C);
-  static const mapRoad = Color(0xFFD7D9D8);
 }
 
 class AppTheme {
