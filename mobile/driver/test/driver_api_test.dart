@@ -332,6 +332,74 @@ void main() {
     },
   );
 
+  test('trip navigation starts and confirms pickup arrival with GPS', () async {
+    SharedPreferences.setMockInitialValues({'driver.accessToken': 'access-1'});
+    final api = DriverApi(
+      client: MockClient((request) async {
+        expect(request.headers['Authorization'], 'Bearer access-1');
+        expect(request.method, 'POST');
+        expect(request.url.path, startsWith('/api/driver/trips/7/'));
+        expect(jsonDecode(request.body), {
+          'lat': 30.05,
+          'lng': 31.33,
+          'accuracyM': 12.5,
+        });
+
+        switch (request.url.path) {
+          case '/api/driver/trips/7/start':
+            return http.Response(
+              jsonEncode({
+                'trip': {'id': '7', 'status': 'heading_to_pickup'},
+              }),
+              200,
+            );
+          case '/api/driver/trips/7/arrive-pickup':
+            return http.Response(
+              jsonEncode({
+                'trip': {'id': '7', 'status': 'arrived_at_pickup'},
+              }),
+              200,
+            );
+          default:
+            fail('Unexpected trip action: ${request.url.path}');
+        }
+      }),
+    );
+
+    final location = {'lat': 30.05, 'lng': 31.33, 'accuracyM': 12.5};
+    final started = await api.updateTrip('7', 'start', body: location);
+    final arrived = await api.updateTrip('7', 'arrive-pickup', body: location);
+
+    expect(started['status'], 'heading_to_pickup');
+    expect(arrived['status'], 'arrived_at_pickup');
+    api.close();
+  });
+
+  test(
+    'logout revokes the refresh token and clears saved credentials',
+    () async {
+      SharedPreferences.setMockInitialValues({
+        'driver.accessToken': 'access-1',
+        'driver.refreshToken': 'refresh-1',
+      });
+      final api = DriverApi(
+        client: MockClient((request) async {
+          expect(request.method, 'POST');
+          expect(request.url.path, '/api/auth/logout');
+          expect(jsonDecode(request.body), {'refreshToken': 'refresh-1'});
+          return http.Response('', 204);
+        }),
+      );
+
+      await api.logout();
+
+      final preferences = await SharedPreferences.getInstance();
+      expect(preferences.getString('driver.accessToken'), isNull);
+      expect(preferences.getString('driver.refreshToken'), isNull);
+      api.close();
+    },
+  );
+
   test('ended refresh session clears both stored tokens', () async {
     SharedPreferences.setMockInitialValues({
       'driver.accessToken': 'expired-access',

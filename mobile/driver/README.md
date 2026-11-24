@@ -85,9 +85,26 @@ account and verify its email. The onboarding flow needs the catalog and policies
 configured on the backend. A driver must be approved and have an active vehicle
 before going online.
 
+After sign-in, the access and refresh tokens are saved locally. On app restart,
+the app validates the saved session and resumes the application, verification,
+or driver home screen as appropriate. The Home destination from Requests resets
+the navigation stack to driver home rather than returning to the welcome screen.
+This saved session is automatic sign-in, not removal of the login or registration
+flow. The Profile tab shows the authenticated account and active vehicle details
+returned by the backend, and its **Log out** action revokes the refresh token and
+clears the locally saved credentials. Names and vehicle plates are not generated
+by the app; incorrect values must be corrected on the corresponding backend
+account or vehicle record.
+
 Allow location access when prompted. Location is required to go online and start
 a trip. Keep location services enabled while working. Trip pickup and delivery
 photos are uploaded directly to the API and must each be no larger than 5 MB.
+
+Accepting an offer opens pickup navigation. Starting navigation and confirming
+arrival send the driver's current GPS position to the backend and advance the
+trip to `heading_to_pickup` and `arrived_at_pickup`, respectively. The floating
+chat launcher is available across app screens; replies are currently demo-only
+because the AI tools do not expose a driver-chat API.
 
 ## Validate
 

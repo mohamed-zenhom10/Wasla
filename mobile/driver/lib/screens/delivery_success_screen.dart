@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:driver/screens/driver_home_screen.dart';
 import 'package:driver/screens/requests_list_screen.dart';
 import 'package:driver/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -24,10 +25,7 @@ class _DeliverySuccessScreenState extends State<DeliverySuccessScreen>
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _scale = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.elasticOut,
-    );
+    _scale = CurvedAnimation(parent: _controller, curve: Curves.elasticOut);
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
     unawaited(_returnToRequests());
@@ -44,7 +42,8 @@ class _DeliverySuccessScreenState extends State<DeliverySuccessScreen>
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute<void>(
-        builder: (_) => const RequestsListScreen(),
+        builder: (_) =>
+            RequestsListScreen(homeBuilder: (_) => const DriverHomeScreen()),
       ),
       (route) => route.isFirst,
     );
@@ -95,10 +94,7 @@ class _DeliverySuccessScreenState extends State<DeliverySuccessScreen>
                       Text(
                         'Great work. Taking you back to requests...',
                         textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: AppColors.muted,
-                          fontSize: 14,
-                        ),
+                        style: TextStyle(color: AppColors.muted, fontSize: 14),
                       ),
                     ],
                   ),

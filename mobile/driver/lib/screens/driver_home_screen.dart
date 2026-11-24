@@ -7,6 +7,7 @@ import 'package:driver/data/driver_api.dart';
 import 'package:driver/data/driver_location.dart';
 import 'package:driver/screens/arriving_screen.dart';
 import 'package:driver/screens/cargo_loaded_screen.dart';
+import 'package:driver/screens/driver_profile_screen.dart';
 import 'package:driver/screens/driver_route_planner_screen.dart';
 import 'package:driver/screens/proof_of_delivery_screen.dart';
 import 'package:driver/screens/requests_list_screen.dart';
@@ -26,7 +27,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   late final DriverApi _api = widget.api ?? DriverApi();
   Timer? _locationTimer;
   Map<String, dynamic> _status = const {};
-  String _driverName = 'Driver';
+  String _driverName = '';
   bool _loading = true;
   bool _busy = false;
   bool _tripOpened = false;
@@ -66,7 +67,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       if (!mounted) return;
       setState(() {
         _status = status;
-        _driverName = user['fullName']?.toString().split(' ').first ?? 'Driver';
+        _driverName =
+            user['fullName']?.toString().trim().split(' ').first ?? '';
         _loading = false;
         _error = null;
       });
@@ -200,19 +202,22 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   children: [
                     const _HomeHeader(),
                     const SizedBox(height: 12),
-                    Text(
-                      'Morning, $_driverName',
-                      style: const TextStyle(
-                        color: AppColors.ink,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
+                    if (!_loading)
+                      Text(
+                        'Morning, ${_driverName.isEmpty ? '—' : _driverName}',
+                        style: const TextStyle(
+                          color: AppColors.ink,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 18),
                     _AvailabilityCard(
                       isOnline: _isOnline,
                       onChanged: _setOnline,
+                      isLoading: _loading,
                       enabled:
+                          !_loading &&
                           !_busy &&
                           (_isOnline || _status['canGoOnline'] == true),
                     ),
@@ -228,7 +233,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       ),
                     ],
                     const SizedBox(height: 16),
-                    _DriverStats(status: _status),
+                    _DriverStats(status: _status, isLoading: _loading),
                     const SizedBox(height: 16),
                     DriverMapPreview(isOnline: _isOnline),
                     const SizedBox(height: 10),
@@ -257,8 +262,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         onTap: () => Navigator.of(context)
                             .push(
                               MaterialPageRoute<void>(
-                                builder: (_) =>
-                                    RequestsListScreen(api: widget.api),
+                                builder: (_) => RequestsListScreen(
+                                  api: _api,
+                                  onHome: () => Navigator.of(context).pop(),
+                                  homeBuilder: (_) =>
+                                      DriverHomeScreen(api: widget.api),
+                                ),
                               ),
                             )
                             .then((_) => _load()),
@@ -287,7 +296,22 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   Navigator.of(context)
                       .push(
                         MaterialPageRoute<void>(
-                          builder: (_) => RequestsListScreen(api: widget.api),
+                          builder: (_) => RequestsListScreen(
+                            api: _api,
+                            onHome: () => Navigator.of(context).pop(),
+                            homeBuilder: (_) =>
+                                DriverHomeScreen(api: widget.api),
+                          ),
+                        ),
+                      )
+                      .then((_) => _load());
+                  return;
+                }
+                if (index == 4) {
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => DriverProfileScreen(api: _api),
                         ),
                       )
                       .then((_) => _load());
@@ -339,11 +363,13 @@ class _AvailabilityCard extends StatelessWidget {
   const _AvailabilityCard({
     required this.isOnline,
     required this.onChanged,
+    required this.isLoading,
     required this.enabled,
   });
 
   final bool isOnline;
   final ValueChanged<bool> onChanged;
+  final bool isLoading;
   final bool enabled;
 
   @override
@@ -362,7 +388,11 @@ class _AvailabilityCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  isOnline ? 'You’re online' : 'You’re offline',
+                  isLoading
+                      ? 'Checking availability…'
+                      : isOnline
+                      ? 'You’re online'
+                      : 'You’re offline',
                   style: const TextStyle(
                     color: AppColors.white,
                     fontSize: 19,
@@ -370,22 +400,25 @@ class _AvailabilityCard extends StatelessWidget {
                   ),
                 ),
               ),
-              Switch(
-                value: isOnline,
-                onChanged: enabled ? onChanged : null,
-                activeThumbColor: AppColors.accent,
-                activeTrackColor: AppColors.ink,
-                inactiveThumbColor: AppColors.white,
-                inactiveTrackColor: AppColors.ink,
-                trackOutlineColor: WidgetStatePropertyAll(
-                  isOnline ? AppColors.accent : AppColors.white,
+              if (!isLoading)
+                Switch(
+                  value: isOnline,
+                  onChanged: enabled ? onChanged : null,
+                  activeThumbColor: AppColors.accent,
+                  activeTrackColor: AppColors.ink,
+                  inactiveThumbColor: AppColors.white,
+                  inactiveTrackColor: AppColors.ink,
+                  trackOutlineColor: WidgetStatePropertyAll(
+                    isOnline ? AppColors.accent : AppColors.white,
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 3),
           Text(
-            isOnline
+            isLoading
+                ? 'Loading your latest status from Wasla.'
+                : isOnline
                 ? 'Ready for requests in your area.'
                 : 'Go online when you are ready to accept trips.',
             style: const TextStyle(
@@ -401,16 +434,27 @@ class _AvailabilityCard extends StatelessWidget {
 }
 
 class _DriverStats extends StatelessWidget {
-  const _DriverStats({required this.status});
+  const _DriverStats({required this.status, required this.isLoading});
 
   final Map<String, dynamic> status;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     final stats = [
-      ('EGP ${status['balance'] ?? '0.00'}', 'Wallet balance'),
-      (status['vehicle']?['plateNumber']?.toString() ?? '—', 'Active vehicle'),
-      (status['canGoOnline'] == true ? 'Ready' : 'Review', 'Work status'),
+      (isLoading ? '…' : 'EGP ${status['balance'] ?? '—'}', 'Wallet balance'),
+      (
+        isLoading ? '…' : status['vehicle']?['plateNumber']?.toString() ?? '—',
+        'Vehicle plate',
+      ),
+      (
+        isLoading
+            ? '…'
+            : status['canGoOnline'] == true
+            ? 'Ready'
+            : 'Review',
+        'Work status',
+      ),
     ];
     return Row(
       children: [

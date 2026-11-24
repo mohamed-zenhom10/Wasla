@@ -9,9 +9,16 @@ import 'package:driver/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 class RequestsListScreen extends StatefulWidget {
-  const RequestsListScreen({super.key, this.api});
+  const RequestsListScreen({
+    super.key,
+    this.api,
+    this.onHome,
+    required this.homeBuilder,
+  });
 
   final DriverApi? api;
+  final VoidCallback? onHome;
+  final WidgetBuilder homeBuilder;
 
   @override
   State<RequestsListScreen> createState() => _RequestsListScreenState();
@@ -175,7 +182,14 @@ class _RequestsListScreenState extends State<RequestsListScreen> {
               currentIndex: 1,
               onDestinationSelected: (index) {
                 if (index == 0) {
-                  Navigator.of(context).popUntil((route) => route.isFirst);
+                  if (widget.onHome case final onHome?) {
+                    onHome();
+                    return;
+                  }
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute<void>(builder: widget.homeBuilder),
+                    (_) => false,
+                  );
                 } else if (index != 1) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(

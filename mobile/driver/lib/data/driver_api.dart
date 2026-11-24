@@ -37,6 +37,12 @@ class DriverApi {
 
   final http.Client _client;
 
+  Future<bool> hasSavedSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.containsKey(_accessTokenKey) &&
+        prefs.containsKey(_refreshTokenKey);
+  }
+
   Future<void> saveTokens(Map<String, dynamic> response) async {
     final prefs = await SharedPreferences.getInstance();
     final accessToken = response['accessToken'] as String?;
@@ -104,6 +110,17 @@ class DriverApi {
       );
     }
     await saveTokens(response);
+  }
+
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    final refreshToken = prefs.getString(_refreshTokenKey);
+    if (refreshToken != null) {
+      await _publicRequest('POST', '/auth/logout', {
+        'refreshToken': refreshToken,
+      });
+    }
+    await clearTokens();
   }
 
   Future<DriverApplication> getApplication() async =>
@@ -431,6 +448,9 @@ class DriverApi {
     'OFFER_EXPIRED' => 'انتهت مهلة الطلب.',
     'OFFER_GONE' => 'لم يعد هذا الطلب متاحًا.',
     'SCHEDULE_CONFLICT' => 'يتعارض موعد الطلب مع رحلة أخرى.',
+    'VEHICLE_CHANGED' =>
+      'تم تغيير المركبة المرتبطة بالرحلة. ألغِ الرحلة وتواصل مع الدعم.',
+    'ANOTHER_TRIP_RUNNING' => 'أنهِ رحلتك الحالية قبل بدء هذه الرحلة.',
     'NOT_ONLINE' => 'أنت غير متصل الآن. ارجع إلى الشاشة الرئيسية.',
     'NOT_APPROVED' => 'لم تتم الموافقة على حساب السائق بعد.',
     'POLICIES_NOT_ACCEPTED' => 'اقبل أحدث الشروط للمتابعة.',

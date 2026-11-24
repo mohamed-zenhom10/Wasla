@@ -1,13 +1,73 @@
+import 'package:driver/data/driver_api.dart';
 import 'package:driver/components/driver_components.dart';
 import 'package:driver/screens/driver_auth_screen.dart';
+import 'package:driver/screens/driver_application_flow.dart';
+import 'package:driver/screens/driver_home_screen.dart';
+import 'package:driver/screens/driver_verification_screen.dart';
 import 'package:driver/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
-class DriverWelcomeScreen extends StatelessWidget {
-  const DriverWelcomeScreen({super.key});
+class DriverWelcomeScreen extends StatefulWidget {
+  const DriverWelcomeScreen({super.key, this.api});
+
+  final DriverApi? api;
+
+  @override
+  State<DriverWelcomeScreen> createState() => _DriverWelcomeScreenState();
+}
+
+class _DriverWelcomeScreenState extends State<DriverWelcomeScreen> {
+  late final DriverApi _api = widget.api ?? DriverApi();
+  bool _checkingSession = true;
+  String? _sessionError;
+
+  @override
+  void initState() {
+    super.initState();
+    _resumeSession();
+  }
+
+  @override
+  void dispose() {
+    if (widget.api == null) _api.close();
+    super.dispose();
+  }
+
+  Future<void> _resumeSession() async {
+    try {
+      if (!await _api.hasSavedSession()) {
+        if (mounted) setState(() => _checkingSession = false);
+        return;
+      }
+
+      final application = await _api.getApplication();
+      if (!mounted) return;
+      final Widget destination = switch (application.status) {
+        'approved' => DriverHomeScreen(api: widget.api),
+        'pending' ||
+        'rejected' => DriverVerificationScreen(application: application),
+        _ => const DriverApplicationFlow(),
+      };
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute<void>(builder: (_) => destination));
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _checkingSession = false;
+        _sessionError = error is DriverApiException
+            ? error.message
+            : 'تعذر استعادة الجلسة. تحقق من الإنترنت وحاول مجددًا.';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_checkingSession) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -47,6 +107,10 @@ class DriverWelcomeScreen extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
+                    if (_sessionError != null) ...[
+                      const SizedBox(height: 16),
+                      NoticePanel(text: _sessionError!),
+                    ],
                     const SizedBox(height: 18),
                     Center(
                       child: Image.asset(
