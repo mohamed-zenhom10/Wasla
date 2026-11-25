@@ -365,6 +365,8 @@ Call it every 5 seconds on the requests screen. Returns `{ "offers": [ ... ] }`,
 ```json
 {
   "id": "41", "sentAt": "...", "expiresAt": "...", "secondsLeft": 24, "distanceToPickupM": 3120,
+  "testMode": false,
+  "customerName": "Mona Ali", "photos": [{ "id": "18", "url": "https://..." }],
   "shipmentId": "12", "cargoCategoryId": "1", "sizeOptionId": "3", "cargoDescription": "A sofa and 2 chairs",
   "itemCount": 3, "isFragile": false, "weightKg": 120, "helpersCount": 1,
   "pickup": { "address": "...", "lat": 30.0444, "lng": 31.2357, "notes": "3rd floor" },
@@ -376,11 +378,13 @@ Call it every 5 seconds on the requests screen. Returns `{ "offers": [ ... ] }`,
 }
 ```
 
-- A driver gets a request when he is online, within `dispatchRadiusM` of the pickup, his vehicle is the type the customer chose, it can carry the weight, and he can bring the helpers.
+- Dispatch starts at 5 km and expands by 5 km up to 30 km. If no offer is pending, the next radius opens after 3 seconds; a pending offer keeps the current radius open until it is answered or its 30-second timer expires. A declined driver is not sent the same shipment again.
+- A driver gets a request when he is online, within the current dispatch radius of the pickup, his vehicle is the type the customer chose, it can carry the weight, and he can bring the helpers.
+- `testMode` is true only when the backend's isolated test dispatch mode is explicitly enabled. In that mode, distance, vehicle type, payload, and helper-capacity checks are bypassed; driver availability and safety checks remain. Database update `004_test_dispatch_mode.sql` is required for accepting and starting these trips. Never enable it on a production backend.
 - `secondsLeft` is for the countdown. When it ends the request is closed, and while the shipment still needs a driver it comes back in the list with a new `id`. A declined request does not come back.
 - `driverEarning` is what the driver keeps. `cashToCollect` is the cash he takes from the customer, `0.00` when the customer pays by wallet.
 - The list is empty when the driver is offline or cannot work now (see `blockers` in `GET /driver/status`).
-- The customer's name and phone come after accepting, in the trip.
+- `customerName` and `photos` are included with the offer. Photo URLs expire after one hour. The customer's phone number is only available after accepting, in the trip.
 - `groupId` is null for a shipment. See below for a grouped order.
 
 #### A grouped order in the list
@@ -390,6 +394,8 @@ A grouped order (one pickup, many drop-offs) comes as one request with `groupId`
 ```json
 {
   "id": "52", "groupId": "4", "sentAt": "...", "expiresAt": "...", "secondsLeft": 24, "distanceToPickupM": 3120,
+  "testMode": false,
+  "customerName": "Mona Ali", "photos": [{ "id": "18", "url": "https://..." }],
   "shipmentId": null, "cargoCategoryId": null, "sizeOptionId": null, "cargoDescription": null,
   "itemCount": 3, "isFragile": false, "weightKg": 60, "helpersCount": 1,
   "pickup": { "address": "...", "lat": 30.0444, "lng": 31.2357, "notes": "Gate 2" },
@@ -730,7 +736,7 @@ Returns `201`. Errors: `INVALID_INPUT`, `SAME_PLACE`
 
 ### GET /shipments/:id/tracking
 
-For the trip screen. Call it every 10 seconds while the trip is running. It is small, so the app does not need to load the whole shipment each time.
+For the trip screen. Call it every 10 seconds after a driver accepts. It is small, so the app does not need to load the whole shipment each time.
 
 ```json
 {
@@ -743,9 +749,9 @@ For the trip screen. Call it every 10 seconds while the trip is running. It is s
 }
 ```
 
-- `driverLocation` is there only while the trip is running (`heading_to_pickup` to `arrived_at_dropoff`). Before the driver starts and after the delivery it is null.
-- `signal` is `live`, or `lost` when the driver sent nothing for `locationStaleSeconds` (2 minutes). Show the last location with a "no signal" note. It is null when the trip is not running.
-- `nextStop` is `pickup` or `dropoff`. `distanceToNextStopM` is a straight line, not the road.
+- `driverLocation` is available after a driver accepts, using the driver's current position while assigned and the trip's recorded GPS points while moving. Before acceptance and after delivery it is null.
+- `signal` is `live`, or `lost` when the last location is older than `locationStaleSeconds` (2 minutes). Show the last location with a "no signal" note. It is null before a driver accepts and after delivery.
+- `nextStop` is `pickup` before the shipment is loaded and `dropoff` after loading. `distanceToNextStopM` is a straight line, not the road.
 - `tripId` and `tripStatus` are null before a driver accepts.
 
 Errors: `NOT_FOUND`
@@ -1158,6 +1164,10 @@ Map libraries give this format directly. Lines that cross each other are refused
 
 - `GET /admin/settings`
 - `PATCH /admin/settings`: any of the settings
+
+`dispatchRadiusM` is retained for compatibility with existing settings clients.
+Driver dispatch now uses the per-shipment 5 km to 30 km expansion policy
+described under `GET /driver/offers`.
 
 ```json
 {

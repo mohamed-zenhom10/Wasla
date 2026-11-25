@@ -43,10 +43,18 @@ class MapPlace {
 }
 
 class DriverMapPreview extends StatelessWidget {
-  const DriverMapPreview({super.key, this.height = 272, this.isOnline});
+  const DriverMapPreview({
+    super.key,
+    this.height = 272,
+    this.isOnline,
+    this.pickup,
+    this.dropoff,
+  });
 
   final double height;
   final bool? isOnline;
+  final MapPlace? pickup;
+  final MapPlace? dropoff;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -57,6 +65,8 @@ class DriverMapPreview extends StatelessWidget {
         trackCurrentLocation: false,
         showNavigationPanel: false,
         stageLabel: isOnline == true ? 'Online · TomTom map' : 'TomTom map',
+        pickup: pickup,
+        dropoff: dropoff,
       ),
     ),
   );
@@ -128,6 +138,17 @@ class _DriverNavigationMapState extends State<DriverNavigationMap> {
 
   MapPlace? get _activeDestination =>
       _destinationOverride ?? widget.destination;
+  LatLng? get _previewCenter {
+    final pickup = widget.pickup?.point;
+    final dropoff = widget.dropoff?.point;
+    if (pickup != null && dropoff != null) {
+      return LatLng(
+        (pickup.latitude + dropoff.latitude) / 2,
+        (pickup.longitude + dropoff.longitude) / 2,
+      );
+    }
+    return pickup ?? dropoff;
+  }
 
   void _onDestinationQueryChanged(String query) {
     _searchDebounce?.cancel();
@@ -605,9 +626,9 @@ class _DriverNavigationMapState extends State<DriverNavigationMap> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: _position == null
-                  ? destination?.point ?? _fallbackCenter
+                  ? destination?.point ?? _previewCenter ?? _fallbackCenter
                   : LatLng(_position!.latitude, _position!.longitude),
-              initialZoom: 13,
+              initialZoom: widget.trackCurrentLocation ? 13 : 11,
               minZoom: 3,
               maxZoom: 19,
               onPositionChanged: (_, hasGesture) {
@@ -616,7 +637,11 @@ class _DriverNavigationMapState extends State<DriverNavigationMap> {
               onMapReady: () {
                 _mapReady = true;
                 final route = _route;
-                if (route != null) _fitRouteOnce(route);
+                if (route != null) {
+                  _fitRouteOnce(route);
+                } else if (!widget.trackCurrentLocation) {
+                  _fitPreviewOnce();
+                }
               },
             ),
             children: [
@@ -828,6 +853,18 @@ class _DriverNavigationMapState extends State<DriverNavigationMap> {
       );
     }
     return markers;
+  }
+
+  void _fitPreviewOnce() {
+    final pickup = widget.pickup?.point;
+    final dropoff = widget.dropoff?.point;
+    if (pickup == null || dropoff == null) return;
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints([pickup, dropoff]),
+        padding: const EdgeInsets.all(24),
+      ),
+    );
   }
 }
 

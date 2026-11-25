@@ -7,7 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:main/components/main_button.dart';
-import 'package:main/theme/app_theme.dart';
+import 'package:main/services/tomtom_routing_service.dart';
 
 class PickedLocation {
   const PickedLocation({required this.address, required this.point});
@@ -360,6 +360,10 @@ class LocationPickerPage extends StatefulWidget {
 
 class _LocationPickerPageState extends State<LocationPickerPage> {
   static const _cairo = LatLng(30.0444, 31.2357);
+  static const _night = Color(0xFF0E1721);
+  static const _surface = Color(0xF20E1721);
+  static const _border = Color(0xFF2C3946);
+  static const _mapAccent = Color(0xFF55E6B1);
 
   final _mapController = MapController();
   final _searchController = TextEditingController();
@@ -371,6 +375,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
   bool _loadingAddress = false;
   bool _locating = false;
   bool _searching = false;
+  bool _tileError = false;
   List<Suggestion> _suggestions = const [];
 
   @override
@@ -418,6 +423,11 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(LocationService.lastError!)));
     }
+  }
+
+  void _onTileError() {
+    if (_tileError || !mounted) return;
+    setState(() => _tileError = true);
   }
 
   Future<void> _goToMyLocation({bool silent = false}) async {
@@ -503,21 +513,39 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
     final hasQuery = _searchController.text.trim().length >= 2;
 
     return Scaffold(
+      backgroundColor: _night,
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _center,
-              initialZoom: 15,
-              onPositionChanged: _onPositionChanged,
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.main',
+          Positioned.fill(
+            child: ColoredBox(
+              color: _night,
+              child: FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: _center,
+                  initialZoom: 15,
+                  minZoom: 3,
+                  maxZoom: 19,
+                  onPositionChanged: _onPositionChanged,
+                ),
+                children: [
+                  if (TomTomRoutingService.apiKey.isNotEmpty)
+                    TileLayer(
+                      urlTemplate:
+                          'https://api.tomtom.com/map/1/tile/basic/night/'
+                          '{z}/{x}/{y}.png?view=Unified&tileSize=512&key={key}',
+                      additionalOptions: {'key': TomTomRoutingService.apiKey},
+                      tileDimension: 512,
+                      zoomOffset: -1,
+                      maxNativeZoom: 19,
+                      keepBuffer: 2,
+                      panBuffer: 0,
+                      userAgentPackageName: 'com.wasla.customer',
+                      errorTileCallback: (_, _, _) => _onTileError(),
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
 
           // Center pin (its tip sits on the map center)
@@ -528,7 +556,10 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                 child: Icon(
                   Icons.location_on,
                   size: 44,
-                  color: AppColors.accent,
+                  color: _mapAccent,
+                  shadows: [
+                    Shadow(color: _night, blurRadius: 10, offset: Offset(0, 3)),
+                  ],
                 ),
               ),
             ),
@@ -543,31 +574,41 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                   Row(
                     children: [
                       Material(
-                        color: AppColors.white,
+                        color: _surface,
                         shape: const CircleBorder(),
                         elevation: 2,
                         child: IconButton(
                           tooltip: 'Back',
-                          icon: const Icon(Icons.arrow_back),
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: Color(0xFFF3F7FA),
+                          ),
                           onPressed: () => Navigator.of(context).maybePop(),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Material(
-                          color: AppColors.white,
+                          color: _surface,
                           elevation: 2,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(17),
                           child: TextField(
                             controller: _searchController,
                             onChanged: _onSearchChanged,
                             style: const TextStyle(
-                              color: AppColors.darkGreen,
+                              color: Color(0xFFF3F7FA),
                               fontSize: 14,
                             ),
                             decoration: InputDecoration(
                               hintText: 'Search ${widget.title.toLowerCase()}',
-                              prefixIcon: const Icon(Icons.search, size: 20),
+                              hintStyle: const TextStyle(
+                                color: Color(0xFF8997A5),
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.search,
+                                size: 20,
+                                color: _mapAccent,
+                              ),
                               suffixIcon: _searching
                                   ? const Padding(
                                       padding: EdgeInsets.all(14),
@@ -576,6 +617,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                         height: 16,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
+                                          color: _mapAccent,
                                         ),
                                       ),
                                     )
@@ -592,13 +634,14 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                   ),
                   if (_suggestions.isNotEmpty)
                     Container(
-                      margin: const EdgeInsets.only(top: 8),
+                      margin: const EdgeInsets.only(top: 8, left: 50),
                       constraints: const BoxConstraints(maxHeight: 320),
                       decoration: BoxDecoration(
-                        color: AppColors.white,
-                        borderRadius: BorderRadius.circular(12),
+                        color: _surface,
+                        border: Border.all(color: _border),
+                        borderRadius: BorderRadius.circular(15),
                         boxShadow: const [
-                          BoxShadow(blurRadius: 8, color: Color(0x22000000)),
+                          BoxShadow(blurRadius: 18, color: Color(0x55000000)),
                         ],
                       ),
                       child: ListView(
@@ -608,11 +651,17 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                           for (final suggestion in _suggestions)
                             ListTile(
                               dense: true,
-                              leading: const Icon(Icons.place_outlined),
+                              leading: const Icon(
+                                Icons.place_outlined,
+                                color: _mapAccent,
+                              ),
                               title: Text(
                                 suggestion.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Color(0xFFF3F7FA),
+                                ),
                               ),
                               subtitle: suggestion.subtitle.isEmpty
                                   ? null
@@ -620,6 +669,9 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                                       suggestion.subtitle,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: Color(0xFF8997A5),
+                                      ),
                                     ),
                               onTap: () => _selectSuggestion(suggestion),
                             ),
@@ -629,20 +681,18 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                   else if (hasQuery && !_searching)
                     Container(
                       width: double.infinity,
-                      margin: const EdgeInsets.only(top: 8),
+                      margin: const EdgeInsets.only(top: 8, left: 50),
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: AppColors.white,
+                        color: _surface,
+                        border: Border.all(color: _border),
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: const [
-                          BoxShadow(blurRadius: 8, color: Color(0x22000000)),
-                        ],
                       ),
                       child: Text(
                         LocationService.lastError ??
                             'No places found. Try another name.',
                         style: const TextStyle(
-                          color: AppColors.darkGreen,
+                          color: Color(0xFFF3F7FA),
                           fontSize: 13,
                         ),
                       ),
@@ -652,12 +702,51 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
             ),
           ),
 
+          if (TomTomRoutingService.apiKey.isEmpty || _tileError)
+            Positioned(
+              top: 76,
+              left: 16,
+              right: 16,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xF23B2428),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFF766C)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    TomTomRoutingService.apiKey.isEmpty
+                        ? 'TomTom API key is required to load the map.'
+                        : 'TomTom map tiles are unavailable. Check your connection.',
+                    style: const TextStyle(
+                      color: Color(0xFFFFB8AE),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          const Positioned(
+            left: 14,
+            bottom: 190,
+            child: Text(
+              '© TomTom',
+              style: TextStyle(
+                color: Color(0xFFF3F7FA),
+                fontSize: 10,
+                shadows: [Shadow(color: Colors.black, blurRadius: 5)],
+              ),
+            ),
+          ),
+
           // My-location button
           Positioned(
             right: 16,
             bottom: 190,
             child: Material(
-              color: AppColors.white,
+              color: _surface,
               shape: const CircleBorder(),
               elevation: 3,
               child: IconButton(
@@ -667,9 +756,12 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _mapAccent,
+                        ),
                       )
-                    : const Icon(Icons.my_location, color: AppColors.darkGreen),
+                    : const Icon(Icons.my_location, color: _mapAccent),
               ),
             ),
           ),
@@ -681,10 +773,11 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(24, 18, 24, 16),
               decoration: const BoxDecoration(
-                color: AppColors.white,
+                color: _night,
+                border: Border(top: BorderSide(color: _border)),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 boxShadow: [
-                  BoxShadow(blurRadius: 12, color: Color(0x22000000)),
+                  BoxShadow(blurRadius: 12, color: Color(0x66000000)),
                 ],
               ),
               child: SafeArea(
@@ -696,7 +789,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                     Text(
                       widget.title,
                       style: const TextStyle(
-                        color: AppColors.darkGreen,
+                        color: Color(0xFFB7C4D0),
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
@@ -707,7 +800,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                       children: [
                         const Icon(
                           Icons.location_on_outlined,
-                          color: AppColors.accent,
+                          color: _mapAccent,
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -720,7 +813,7 @@ class _LocationPickerPageState extends State<LocationPickerPage> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              color: AppColors.darkGreen,
+                              color: Color(0xFFF3F7FA),
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
                             ),

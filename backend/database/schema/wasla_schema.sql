@@ -429,6 +429,9 @@ CREATE TABLE shipment_groups (
     pickup_location    GEOGRAPHY(POINT, 4326) NOT NULL,
     pickup_notes       TEXT,
     helpers_count      SMALLINT NOT NULL DEFAULT 0 CHECK (helpers_count BETWEEN 0 AND 20),
+    dispatch_radius_m  INTEGER NOT NULL DEFAULT 5000
+                       CHECK (dispatch_radius_m BETWEEN 5000 AND 30000 AND dispatch_radius_m % 5000 = 0),
+    dispatch_radius_updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT uq_shipment_groups_id_customer UNIQUE (id, customer_id)
 );
@@ -458,6 +461,9 @@ CREATE TABLE shipments (
     pickup_window_start         TIMESTAMPTZ NOT NULL,
     pickup_window_end           TIMESTAMPTZ NOT NULL,
     search_started_at           TIMESTAMPTZ,
+    dispatch_radius_m           INTEGER NOT NULL DEFAULT 5000
+                                CHECK (dispatch_radius_m BETWEEN 5000 AND 30000 AND dispatch_radius_m % 5000 = 0),
+    dispatch_radius_updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     route_distance_m            INTEGER CHECK (route_distance_m > 0),
     route_duration_s            INTEGER CHECK (route_duration_s > 0),
     payment_method              TEXT NOT NULL CHECK (payment_method IN ('cash', 'wallet')),
@@ -1965,6 +1971,22 @@ END$$;
 CREATE TRIGGER trg_shipments_guard BEFORE INSERT OR UPDATE ON shipments
     FOR EACH ROW EXECUTE FUNCTION shipments_guard();
 
+CREATE FUNCTION shipments_dispatch_radius_reset() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.status = 'searching_driver' AND OLD.status <> 'searching_driver' THEN
+        NEW.dispatch_radius_m := 5000;
+        NEW.dispatch_radius_updated_at := now();
+        IF NEW.group_id IS NOT NULL THEN
+            UPDATE shipment_groups
+            SET dispatch_radius_m = 5000, dispatch_radius_updated_at = now()
+            WHERE id = NEW.group_id;
+        END IF;
+    END IF;
+    RETURN NEW;
+END$$;
+CREATE TRIGGER trg_shipments_dispatch_radius_reset BEFORE UPDATE OF status ON shipments
+    FOR EACH ROW EXECUTE FUNCTION shipments_dispatch_radius_reset();
+
 CREATE FUNCTION shipment_cargo_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     sid BIGINT;
@@ -2189,6 +2211,7 @@ DECLARE
     dp   driver_profiles%ROWTYPE;
     lic  driver_documents%ROWTYPE;
     ob   trips%ROWTYPE;
+    test_mode BOOLEAN := COALESCE(current_setting('wasla.dispatch_test_mode', true) = 'true', false);
 BEGIN
     SELECT * INTO sh FROM shipments WHERE id = NEW.shipment_id;
 
@@ -2215,10 +2238,13 @@ BEGIN
            OR NEW.cancellation_ticket_id IS NOT NULL THEN
             RAISE EXCEPTION 'a new trip starts empty: progress, delivery code, vehicle fit, money and cancellation are filled in later';
         END IF;
-        IF NOT EXISTS (SELECT 1 FROM vehicles WHERE id = NEW.vehicle_id AND vehicle_type_id = q.vehicle_type_id) THEN
+        IF NOT test_mode AND NOT EXISTS (
+            SELECT 1 FROM vehicles WHERE id = NEW.vehicle_id AND vehicle_type_id = q.vehicle_type_id
+        ) THEN
             RAISE EXCEPTION 'vehicle % is not the vehicle type the price was quoted for', NEW.vehicle_id;
         END IF;
-        IF (SELECT COALESCE(sum(s.weight_kg), 0) FROM shipments s
+        IF NOT test_mode AND
+           (SELECT COALESCE(sum(s.weight_kg), 0) FROM shipments s
             WHERE (s.id = sh.id OR (sh.group_id IS NOT NULL AND s.group_id = sh.group_id)) AND s.status <> 'cancelled')
            > (SELECT max_payload_kg FROM vehicles WHERE id = NEW.vehicle_id) THEN
             RAISE EXCEPTION 'cargo weight is more than the payload of vehicle %', NEW.vehicle_id;
@@ -2243,7 +2269,7 @@ BEGIN
         IF driver_balance(NEW.driver_id) < -driver_debt_limit(NEW.driver_id) THEN
             RAISE EXCEPTION 'driver % is blocked: debt is over the limit', NEW.driver_id;
         END IF;
-        IF dp.max_helpers < sh.helpers_count THEN
+        IF NOT test_mode AND dp.max_helpers < sh.helpers_count THEN
             RAISE EXCEPTION 'driver % can provide % helpers, shipment needs %', NEW.driver_id, dp.max_helpers, sh.helpers_count;
         END IF;
         lic := driver_current_license(NEW.driver_id);
@@ -2624,16 +2650,17 @@ CREATE TRIGGER trg_return_proposals_update_guard BEFORE UPDATE ON return_match_p
 CREATE FUNCTION dispatch_offers_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     lead INTEGER := (SELECT scheduled_search_lead_minutes FROM platform_settings);
+    test_mode BOOLEAN := COALESCE(current_setting('wasla.dispatch_test_mode', true) = 'true', false);
 BEGIN
     IF NEW.response <> 'pending' OR NEW.responded_at IS NOT NULL OR NEW.trip_id IS NOT NULL THEN
         RAISE EXCEPTION 'an offer starts as pending, without a response or a trip';
     END IF;
-    IF EXISTS (SELECT 1 FROM price_quotes q JOIN shipments s ON s.id = q.shipment_id
+    IF NOT test_mode AND EXISTS (SELECT 1 FROM price_quotes q JOIN shipments s ON s.id = q.shipment_id
                WHERE q.status = 'accepted' AND (s.id = NEW.shipment_id OR s.group_id = NEW.group_id)
                  AND q.vehicle_type_id <> (SELECT vehicle_type_id FROM vehicles WHERE id = NEW.vehicle_id)) THEN
         RAISE EXCEPTION 'vehicle % is not the vehicle type the price was quoted for', NEW.vehicle_id;
     END IF;
-    IF (SELECT COALESCE(sum(weight_kg), 0) FROM shipments
+    IF NOT test_mode AND (SELECT COALESCE(sum(weight_kg), 0) FROM shipments
         WHERE (id = NEW.shipment_id OR group_id = NEW.group_id) AND status <> 'cancelled')
        > (SELECT max_payload_kg FROM vehicles WHERE id = NEW.vehicle_id) THEN
         RAISE EXCEPTION 'cargo weight is more than the payload of vehicle %', NEW.vehicle_id;
@@ -3512,6 +3539,7 @@ DECLARE
     sh shipments%ROWTYPE;
     lic driver_documents%ROWTYPE;
     known_weight NUMERIC;
+    test_mode BOOLEAN := COALESCE(current_setting('wasla.dispatch_test_mode', true) = 'true', false);
 BEGIN
     SELECT * INTO dp FROM driver_profiles WHERE user_id = p_driver FOR UPDATE;
     SELECT * INTO v FROM vehicles WHERE id = p_vehicle FOR SHARE;
@@ -3526,7 +3554,8 @@ BEGIN
     IF dp.active_vehicle_id IS DISTINCT FROM p_vehicle THEN
         RAISE EXCEPTION 'U_ACTIVE_VEHICLE: trip must use the selected active vehicle';
     END IF;
-    IF v.vehicle_type_id IS DISTINCT FROM (SELECT vehicle_type_id FROM price_quotes WHERE id = p_quote) THEN
+    IF NOT test_mode
+       AND v.vehicle_type_id IS DISTINCT FROM (SELECT vehicle_type_id FROM price_quotes WHERE id = p_quote) THEN
         RAISE EXCEPTION 'U_VEHICLE_TYPE: vehicle must match the accepted quote';
     END IF;
     IF NOT accepted_latest_policies(p_driver) THEN
@@ -3541,7 +3570,9 @@ BEGIN
         AND superseded_at IS NULL AND expires_on > current_date) THEN
         RAISE EXCEPTION 'U_VEHICLE_LICENSE: current valid vehicle license required';
     END IF;
-    IF dp.max_helpers < sh.helpers_count THEN RAISE EXCEPTION 'U_HELPERS: insufficient helpers'; END IF;
+    IF NOT test_mode AND dp.max_helpers < sh.helpers_count THEN
+        RAISE EXCEPTION 'U_HELPERS: insufficient helpers';
+    END IF;
     IF driver_balance(p_driver) < -driver_debt_limit(p_driver) THEN
         RAISE EXCEPTION 'U_DEBT: driver debt exceeds the limit';
     END IF;
@@ -3551,7 +3582,7 @@ BEGIN
         SELECT sum(weight_kg) INTO known_weight FROM shipments
         WHERE group_id = sh.group_id AND status NOT IN ('delivered','cancelled');
     END IF;
-    IF known_weight > v.max_payload_kg THEN
+    IF NOT test_mode AND known_weight > v.max_payload_kg THEN
         RAISE EXCEPTION 'U_PAYLOAD: known cargo weight exceeds vehicle payload';
     END IF;
 END$$;

@@ -1,8 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart' show LatLng;
+import 'package:main/components/customer_tracking_map.dart';
 import 'package:main/models/shipment.dart';
 import 'package:main/pages/cargo_category_page.dart';
 import 'package:main/pages/no_driver_found_page.dart';
@@ -33,7 +32,10 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
   void initState() {
     super.initState();
     _refresh();
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh(silent: true));
+    _timer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _refresh(silent: true),
+    );
   }
 
   @override
@@ -55,7 +57,8 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
         _timer?.cancel();
         Navigator.of(context).pushReplacement(
           MaterialPageRoute<void>(
-            builder: (_) => TrackingDriverArrivingPage(shipmentId: widget.shipmentId),
+            builder: (_) =>
+                TrackingDriverArrivingPage(shipmentId: widget.shipmentId),
           ),
         );
         return;
@@ -134,9 +137,7 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
 
     if (!mounted) return;
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => CargoCategoryPage(draft: draft),
-      ),
+      MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
     );
   }
 
@@ -169,7 +170,10 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
     await _cancelShipment(shipment, acceptFee: false);
   }
 
-  Future<void> _cancelShipment(Shipment shipment, {required bool acceptFee}) async {
+  Future<void> _cancelShipment(
+    Shipment shipment, {
+    required bool acceptFee,
+  }) async {
     setState(() => _isCancelling = true);
     try {
       await _service.cancelShipment(
@@ -257,30 +261,13 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
 
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute<void>(
-        builder: (_) => CargoCategoryPage(draft: draft),
-      ),
+      MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
     );
-  }
-
-  LatLng? get _pickupPoint {
-    final pickup = _shipment?.pickup;
-    if (pickup == null) return null;
-    return LatLng(pickup.latitude, pickup.longitude);
-  }
-
-  LatLng? get _dropoffPoint {
-    final dropoff = _shipment?.dropoff;
-    if (dropoff == null) return null;
-    return LatLng(dropoff.latitude, dropoff.longitude);
   }
 
   @override
   Widget build(BuildContext context) {
     final shipment = _shipment;
-    final pickup = _pickupPoint;
-    final dropoff = _dropoffPoint;
-    final hasRoute = pickup != null && dropoff != null;
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -296,12 +283,17 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
                     onPressed: () => Navigator.of(context).maybePop(),
                     tooltip: 'Back',
                     icon: const Icon(Icons.arrow_back, size: 24),
-                    constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                    constraints: const BoxConstraints(
+                      minWidth: 40,
+                      minHeight: 40,
+                    ),
                   ),
                   const Spacer(),
                   Text(
                     shipment == null ? 'Shipment' : 'Shipment #${shipment.id}',
-                    style: AppTypography.bodyMd.copyWith(fontWeight: FontWeight.w700),
+                    style: AppTypography.bodyMd.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
@@ -320,62 +312,9 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
               height: 300,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: hasRoute
-                        ? LatLng(
-                            (pickup.latitude + dropoff.latitude) / 2,
-                            (pickup.longitude + dropoff.longitude) / 2,
-                          )
-                        : (pickup ?? dropoff ?? const LatLng(30.0444, 31.2357)),
-                    initialZoom: hasRoute ? 12 : 13,
-                    interactionOptions: const InteractionOptions(
-                      flags: InteractiveFlag.none,
-                    ),
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.main',
-                    ),
-                    if (hasRoute)
-                      PolylineLayer(
-                        polylines: [
-                          Polyline(
-                            points: [pickup, dropoff],
-                            color: AppColors.accent,
-                            strokeWidth: 4,
-                          ),
-                        ],
-                      ),
-                    MarkerLayer(
-                      markers: [
-                        if (pickup != null)
-                          Marker(
-                            point: pickup,
-                            width: 40,
-                            height: 40,
-                            child: const Icon(
-                              Icons.location_on,
-                              color: AppColors.accent,
-                              size: 40,
-                            ),
-                          ),
-                        if (dropoff != null)
-                          Marker(
-                            point: dropoff,
-                            width: 40,
-                            height: 40,
-                            child: const Icon(
-                              Icons.location_on,
-                              color: AppColors.darkGreen,
-                              size: 40,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
+                child: shipment == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : CustomerTrackingMap(shipment: shipment, height: 300),
               ),
             ),
             Expanded(
@@ -410,7 +349,10 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
                     ),
                     if (_errorMessage != null) ...[
                       const SizedBox(height: 12),
-                      Text(_errorMessage!, style: const TextStyle(color: AppColors.accent)),
+                      Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: AppColors.accent),
+                      ),
                     ],
                     const SizedBox(height: 16),
                     Container(
@@ -458,7 +400,9 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
                     const SizedBox(height: 8),
                     OutlinedButton(
                       onPressed: _isCancelling ? null : _cancelAndEdit,
-                      child: Text(_isCancelling ? 'Cancelling...' : 'Cancel and edit'),
+                      child: Text(
+                        _isCancelling ? 'Cancelling...' : 'Cancel and edit',
+                      ),
                     ),
                   ],
                 ),
@@ -482,7 +426,10 @@ class _InfoRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(child: Text(label, style: AppTypography.bodyMd)),
-        Text(value, style: AppTypography.bodyMd.copyWith(fontWeight: FontWeight.w700)),
+        Text(
+          value,
+          style: AppTypography.bodyMd.copyWith(fontWeight: FontWeight.w700),
+        ),
       ],
     );
   }

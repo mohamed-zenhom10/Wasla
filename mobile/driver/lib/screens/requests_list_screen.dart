@@ -260,6 +260,29 @@ class _RequestCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (request['testMode'] == true) ...[
+                const Row(
+                  children: [
+                    Icon(
+                      Icons.science_outlined,
+                      size: 16,
+                      color: AppColors.accent,
+                    ),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'TEST MODE · compatibility checks disabled',
+                        style: TextStyle(
+                          color: AppColors.accent,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
               Row(
                 children: [
                   if (isHighlighted)

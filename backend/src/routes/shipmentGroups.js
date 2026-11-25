@@ -11,6 +11,7 @@ import {
 } from '../lib/storage.js';
 import { STATUS_FILTERS } from '../lib/shipments.js';
 import { cleanCouponCode, checkCoupon } from '../lib/coupons.js';
+import { makeOffers } from '../lib/dispatch.js';
 import {
   groupFields, stopFields, lockGroup, requireEditable, findStop, createGroup, updateGroup, addStop, updateStop,
   removeStop, reorderStops, readTiming, priceGroup, acceptGroupPrice, withdrawGroupPrice, requestGroup, cancelGroup,
@@ -199,7 +200,14 @@ router.post('/:id/withdraw-price', async (req, res) => {
 });
 
 router.post('/:id/request', async (req, res) => {
-  await change(req, (client, locked) => requestGroup(client, locked, req.user.id));
+  await change(req, async (client, locked) => {
+    await requestGroup(client, locked, req.user.id);
+    await client.query(
+      'UPDATE shipment_groups SET dispatch_radius_m = 5000, dispatch_radius_updated_at = now() WHERE id = $1',
+      [locked.id],
+    );
+    await makeOffers(client);
+  });
   await reply(req, res, req.params.id);
 });
 

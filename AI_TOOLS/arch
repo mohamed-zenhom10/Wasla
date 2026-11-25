@@ -1,6 +1,9 @@
 how to run and the port (driver app)
 cd C:\Users\alext\Desktop\project_01\test\Wasla\mobile\driver
-flutter run -d edge --web-port 5173
+cd C:\Users\alext\Desktop\project_01\test\Wasla\mobile\customer
+
+flutter run -d edge --web-port 5173 --dart-define-from-file=tomtom-key.json
+
 flutter run -d edge --web-port 5173 --dart-define=NATIONAL_ID_OCR_API_KEY=K8590905089582588957
 
 flutter run -d edge --web-port 5173 --dart-define=NATIONAL_ID_OCR_API_KEY=K8858359170701888957
@@ -11,3 +14,11 @@ mapsAPI:6MWZcpW8yeVoxLIybxXjbz8aE8N70pUP
 driver_acc
 mo9462623@gmail.com
 0123456789
+
+cus acc
+11archimedes3366@gmail.com
+0123456789Aa
+
+
+
+flutter build apk --release --dart-define=NATIONAL_ID_OCR_API_KEY=YOUR_KEY

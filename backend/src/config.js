@@ -47,9 +47,17 @@ if (process.env.BREVO_API_KEY && !process.env.MAIL_FROM) {
   process.exit(1);
 }
 
+const dispatchTestMode = process.env.DISPATCH_TEST_MODE === 'true';
+if (dispatchTestMode) {
+  console.warn(
+    'DISPATCH_TEST_MODE is enabled: offers ignore pickup distance, vehicle type, payload and helper capacity. Use only on an isolated test backend.',
+  );
+}
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   port: Number(process.env.PORT) || 3000,
+  dispatchTestMode,
   db: {
     host: process.env.DB_HOST,
     port: Number(process.env.DB_PORT),

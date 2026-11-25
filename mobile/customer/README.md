@@ -1,17 +1,40 @@
-# main
+# Wasla Customer app
 
-A new Flutter project.
+The customer app uses the Wasla PostgreSQL-backed API for shipments, driver
+offers, and live trip locations. Apply pending SQL updates from
+[`backend/database/updates/`](../../backend/database/updates/) before deploying
+backend changes.
 
-## Getting Started
+## Run with TomTom maps
 
-This project is a starting point for a Flutter application.
+The customer tracking map requests TomTom map tiles, traffic tiles, and a
+traffic-aware route once when the trip starts and again when it changes between
+pickup and delivery. It reads GPS updates from the backend; it does not request
+routes on each location poll.
 
-A few resources to get you started if this is your first Flutter project:
+Keep a separate, untracked `tomtom-key.json` in this directory. It belongs to
+the Customer app; it is not read from or shared with the Driver app:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```json
+{
+  "TOMTOM_API_KEY": "your-customer-tomtom-key",
+  "WASLA_API_URL": "https://wasla-api-464a.onrender.com/api"
+}
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Set a customer-specific TomTom key and backend URL there. From this directory:
+
+```powershell
+flutter pub get
+flutter run -d edge --web-port 5174 --dart-define-from-file=tomtom-key.json
+flutter build apk --release --dart-define-from-file=tomtom-key.json
+```
+
+Do not commit the key file. Keys passed as Dart defines are still included in a
+client app/APK and can be extracted; restrict them by API and platform in
+TomTom's developer portal.
+
+The driver matching screen displays the route between pickup and delivery.
+After a driver accepts, the map follows the driver's backend location to pickup,
+then switches to the delivery destination once the shipment is loaded. A
+missing key, routing failure, or unavailable GPS feed is shown in the map UI.

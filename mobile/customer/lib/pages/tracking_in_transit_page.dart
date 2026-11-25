@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:main/components/customer_tracking_map.dart';
 import 'package:main/components/main_button.dart';
 import 'package:main/models/shipment.dart';
 import 'package:main/pages/tracking_shipment_stages_page.dart';
@@ -30,7 +31,10 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
   void initState() {
     super.initState();
     _load();
-    _timer = Timer.periodic(const Duration(seconds: 10), (_) => _load(silent: true));
+    _timer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _load(silent: true),
+    );
   }
 
   @override
@@ -58,10 +62,13 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
       });
       if (shipment.status == 'delivered') {
         if (mounted) {
-          context.findAncestorStateOfType<HomeScreenState>()?.resetLocationSelection();
+          context
+              .findAncestorStateOfType<HomeScreenState>()
+              ?.resetLocationSelection();
         }
       }
-      final terminal = shipment.status == 'delivered' ||
+      final terminal =
+          shipment.status == 'delivered' ||
           shipment.status == 'cancelled' ||
           shipment.trip == null && shipment.status == 'searching_driver';
       if (terminal) _timer?.cancel();
@@ -102,7 +109,7 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       children: [
                         const SizedBox(height: 16),
-                        _buildMapCard(tracking),
+                        _buildMapCard(shipment, tracking),
                         const SizedBox(height: 12),
                         _buildStatusCard(shipment, tracking),
                         const SizedBox(height: 12),
@@ -113,7 +120,10 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
                         _buildRouteCard(shipment),
                         if (_errorMessage != null) ...[
                           const SizedBox(height: 12),
-                          Text(_errorMessage!, style: const TextStyle(color: AppColors.accent)),
+                          Text(
+                            _errorMessage!,
+                            style: const TextStyle(color: AppColors.accent),
+                          ),
                         ],
                         const SizedBox(height: 24),
                       ],
@@ -145,22 +155,17 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
     );
   }
 
-  Widget _buildMapCard(ShipmentTracking? tracking) {
-    final location = tracking?.driverLocation;
-    return Container(
-      height: 160,
-      decoration: BoxDecoration(
-        color: AppColors.light,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Center(
-        child: location == null
-            ? const Text('Driver location unavailable')
-            : Text(
-                'Driver: ${location.latitude.toStringAsFixed(5)}, ${location.longitude.toStringAsFixed(5)}',
-                style: AppTypography.bodySm,
-              ),
-      ),
+  Widget _buildMapCard(Shipment? shipment, ShipmentTracking? tracking) {
+    if (shipment == null) {
+      return const SizedBox(
+        height: 260,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return CustomerTrackingMap(
+      shipment: shipment,
+      tracking: tracking,
+      height: 260,
     );
   }
 
@@ -176,16 +181,31 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
       ),
       child: Column(
         children: [
-          Text(status, style: AppTypography.headingSm, textAlign: TextAlign.center),
+          Text(
+            status,
+            style: AppTypography.headingSm,
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 8),
-          Text('Trip status: $tripStatus', style: AppTypography.bodyMd, textAlign: TextAlign.center),
-          if (shipment?.trip == null && shipment?.status == 'searching_driver') ...[
+          Text(
+            'Trip status: $tripStatus',
+            style: AppTypography.bodyMd,
+            textAlign: TextAlign.center,
+          ),
+          if (shipment?.trip == null &&
+              shipment?.status == 'searching_driver') ...[
             const SizedBox(height: 8),
-            const Text('Driver cancelled or no driver assigned yet.', style: TextStyle(color: AppColors.accent)),
+            const Text(
+              'Driver cancelled or no driver assigned yet.',
+              style: TextStyle(color: AppColors.accent),
+            ),
           ],
           if (shipment?.status == 'delivered') ...[
             const SizedBox(height: 8),
-            const Text('Delivery completed.', style: TextStyle(color: AppColors.darkGreen)),
+            const Text(
+              'Delivery completed.',
+              style: TextStyle(color: AppColors.darkGreen),
+            ),
           ],
         ],
       ),
@@ -197,8 +217,14 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: AppColors.light, borderRadius: BorderRadius.circular(12)),
-        child: Text('Tracking data is not available yet.', style: AppTypography.bodySm),
+        decoration: BoxDecoration(
+          color: AppColors.light,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          'Tracking data is not available yet.',
+          style: AppTypography.bodySm,
+        ),
       );
     }
     final signal = tracking.signal ?? 'unknown';
@@ -215,10 +241,20 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Signal: $signal', style: AppTypography.bodyMd),
-          if (lost) const Text('No recent driver signal.', style: TextStyle(color: AppColors.accent)),
+          if (lost)
+            const Text(
+              'No recent driver signal.',
+              style: TextStyle(color: AppColors.accent),
+            ),
           const SizedBox(height: 8),
-          Text('Next stop: ${tracking.nextStop ?? '—'}', style: AppTypography.bodySm),
-          Text('Distance to next stop: ${tracking.distanceToNextStopM?.toString() ?? '—'} m', style: AppTypography.bodySm),
+          Text(
+            'Next stop: ${tracking.nextStop ?? '—'}',
+            style: AppTypography.bodySm,
+          ),
+          Text(
+            'Distance to next stop: ${tracking.distanceToNextStopM?.toString() ?? '—'} m',
+            style: AppTypography.bodySm,
+          ),
           if (tracking.driverLocation != null)
             Text(
               'Location accuracy: ${tracking.driverAccuracyM?.toStringAsFixed(1) ?? '—'} m',
@@ -233,7 +269,10 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: AppColors.light, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: AppColors.light,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -250,7 +289,10 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: AppColors.light, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: AppColors.light,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -262,15 +304,15 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
   }
 
   Widget _row(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(width: 84, child: Text(label, style: AppTypography.bodyXs)),
-            Expanded(child: Text(value, style: AppTypography.bodySm)),
-          ],
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 84, child: Text(label, style: AppTypography.bodyXs)),
+        Expanded(child: Text(value, style: AppTypography.bodySm)),
+      ],
+    ),
+  );
 
   Widget _buildActions(Shipment? shipment) {
     return Padding(
@@ -282,7 +324,8 @@ class _TrackingInTransitPageState extends State<TrackingInTransitPage> {
             variant: WaslaButtonVariant.primary,
             onPressed: () => Navigator.of(context).push(
               TAMaterialRoute<void>(
-                builder: (_) => TrackingShipmentStagesPage(shipmentId: widget.shipmentId),
+                builder: (_) =>
+                    TrackingShipmentStagesPage(shipmentId: widget.shipmentId),
               ),
             ),
           ),

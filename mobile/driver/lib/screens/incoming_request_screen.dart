@@ -67,6 +67,26 @@ class _IncomingRequestScreenState extends State<IncomingRequestScreen> {
                       label: 'New shipment request',
                       progress: countdown,
                     ),
+                    if (widget.offer['testMode'] == true) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3D6),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFFFC857)),
+                        ),
+                        child: const Text(
+                          'TEST MODE: distance, vehicle type, payload, and helper-capacity checks are disabled.',
+                          style: TextStyle(
+                            color: Color(0xFF6D4C00),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                     const Text(
                       'New shipment request',
                       style: TextStyle(
@@ -76,7 +96,19 @@ class _IncomingRequestScreenState extends State<IncomingRequestScreen> {
                       ),
                     ),
                     const SizedBox(height: 18),
-                    const DriverMapPreview(height: 192),
+                    DriverMapPreview(
+                      height: 192,
+                      pickup: MapPlace.fromJson(
+                        widget.offer['pickup'],
+                        'Pickup',
+                      ),
+                      dropoff: MapPlace.fromJson(
+                        widget.offer['dropoff'],
+                        'Delivery',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _CustomerPanel(offer: widget.offer),
                     const SizedBox(height: 16),
                     _EarningsPanel(offer: widget.offer),
                     const SizedBox(height: 16),
@@ -213,6 +245,77 @@ class _EarningsPanel extends StatelessWidget {
             Text(
               'Cash to collect · EGP ${offer['cashToCollect']}',
               style: TextStyle(color: AppColors.white, fontSize: 12),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CustomerPanel extends StatelessWidget {
+  const _CustomerPanel({required this.offer});
+
+  final Map<String, dynamic> offer;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = offer['customerName']?.toString().trim();
+    final photos = (offer['photos'] as List? ?? const [])
+        .whereType<Map>()
+        .map((photo) => photo['url']?.toString())
+        .whereType<String>()
+        .where((url) => url.startsWith('http://') || url.startsWith('https://'))
+        .toList();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Customer',
+            style: TextStyle(color: AppColors.ink, fontSize: 11),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            name?.isNotEmpty == true ? name! : 'Customer',
+            style: const TextStyle(
+              color: AppColors.ink,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (photos.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 76,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: photos.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (context, index) => ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    photos[index],
+                    width: 76,
+                    height: 76,
+                    cacheWidth: 180,
+                    cacheHeight: 180,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Container(
+                      width: 76,
+                      height: 76,
+                      color: Colors.black12,
+                      child: const Icon(Icons.broken_image_outlined),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         ],

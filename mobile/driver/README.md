@@ -2,7 +2,9 @@
 
 The driver app uses the API contract in [`backend/API.md`](../../backend/API.md).
 Authentication, driver applications, live availability, offers, and trip
-updates are sent to the backend. Offer polling is every 5 seconds; driver
+updates are sent to the backend. Offers are dispatched to eligible nearby
+drivers in 5 km steps up to 30 km, and include the customer's name and shipment
+photos. Offer polling is every 5 seconds; driver
 location is sent every 30 seconds online and every 10 seconds during a trip.
 
 ## Run the app

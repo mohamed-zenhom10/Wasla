@@ -115,7 +115,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final api = _FakeDriverApi(online: true);
+    final api = _FakeDriverApi(online: true, testMode: true);
     await tester.pumpWidget(
       MaterialApp(
         home: RequestsListScreen(
@@ -130,6 +130,10 @@ void main() {
       find.text('12 Abbas El Akkad → 18 Road 9  ·  EGP 535.65 net'),
       findsOneWidget,
     );
+    expect(
+      find.text('TEST MODE · compatibility checks disabled'),
+      findsOneWidget,
+    );
     final card = find.byKey(const ValueKey('request-offer-41'));
     await tester.ensureVisible(card);
     await tester.tap(card);
@@ -139,6 +143,12 @@ void main() {
     expect(find.text('EGP 535.65'), findsOneWidget);
     expect(find.text('Cargo  ·  A sofa and 2 chairs'), findsOneWidget);
     expect(find.text('3 items · 120 kg · 0 helpers'), findsOneWidget);
+    expect(
+      find.text(
+        'TEST MODE: distance, vehicle type, payload, and helper-capacity checks are disabled.',
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -192,12 +202,14 @@ class _FakeDriverApi extends DriverApi {
     this.hasSession = false,
     this.applicationStatus = 'not_started',
     this.vehiclePlate = 'ABC 123',
+    this.testMode = false,
   });
 
   final bool online;
   final bool hasSession;
   final String applicationStatus;
   final String vehiclePlate;
+  final bool testMode;
   bool logoutCalled = false;
 
   @override
@@ -251,6 +263,7 @@ class _FakeDriverApi extends DriverApi {
   Future<List<Map<String, dynamic>>> getOffers() async => [
     {
       'id': 'offer-41',
+      'testMode': testMode,
       'secondsLeft': 24,
       'distanceToPickupM': 3120,
       'shipmentId': '12',

@@ -36,6 +36,7 @@ mobile/customer/.kilo/kilo.jsonc
 .pub/
 /build/
 /coverage/
+/tomtom-key.json
 
 # Symbolication related
 app.*.symbols

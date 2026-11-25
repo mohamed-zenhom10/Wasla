@@ -13,7 +13,7 @@ import {
   readPoint, readAccuracy, loadState, blockersOf, blockerError,
 } from '../lib/presence.js';
 import {
-  closeOldOffers, makeOffers, listOffers, createTrip, createGroupTrips,
+  closeOldOffers, advanceDispatchRadius, makeOffers, listOffers, createTrip, createGroupTrips, setDispatchTestMode,
 } from '../lib/dispatch.js';
 import {
   EXECUTING, FINISHED, BEFORE_LOADING, loadTrip, currentTrip, listTrips, trackPoint,
@@ -40,12 +40,13 @@ function offerGone() {
 router.get('/offers', async (req, res) => {
   const offers = await withTransaction(actorOf(req), async (client) => {
     const state = await loadState(client, req.user.id, true);
-    await closeOldOffers(client, req.user.id);
+    await closeOldOffers(client);
     if (!state || !state.is_online || blockersOf(state).length > 0) {
       return [];
     }
+    await advanceDispatchRadius(client);
     await makeOffers(client, req.user.id);
-    return listOffers(client, req.user.id);
+    return listOffers(client, req.user.id, baseUrl(req));
   });
   res.json({ offers });
 });
@@ -115,7 +116,7 @@ router.post('/offers/:id/decline', async (req, res) => {
       `UPDATE dispatch_offers SET response = 'rejected', responded_at = now() WHERE id = $1`,
       [offer.id],
     );
-    return listOffers(client, req.user.id);
+    return listOffers(client, req.user.id, baseUrl(req));
   });
   res.json({ offers });
 });
@@ -229,6 +230,7 @@ router.post('/trips/:id/start', async (req, res) => {
   const point = readPoint(body);
   const accuracy = readAccuracy(body);
   await withTransaction(actorOf(req), async (client) => {
+    await setDispatchTestMode(client);
     const state = await loadState(client, req.user.id, true);
     const trips = await lockStep(client, id, req.user.id, 'assigned');
     const [trip] = trips;

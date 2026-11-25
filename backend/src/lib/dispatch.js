@@ -1,6 +1,8 @@
 import {
   JOB_COLUMNS, GROUP_TOTALS, toJob, toStop,
 } from './trips.js';
+import config from '../config.js';
+import { imageUrl } from './storage.js';
 
 const PLANNED_START = `CASE WHEN s.pickup_type = 'now' THEN now() ELSE GREATEST(now(), s.pickup_window_start) END`;
 const PLANNED_END = `${PLANNED_START} + make_interval(secs => COALESCE(s.route_duration_s, 3600)) + interval '60 minutes'`;
@@ -16,6 +18,12 @@ const GROUP_LOAD = `SELECT count(*) AS stops,
   WHERE s.group_id = g.id AND s.status <> 'cancelled'`;
 const GROUP_START = `CASE WHEN x.scheduled THEN GREATEST(now(), x.window_start) ELSE now() END`;
 const GROUP_END = `${GROUP_START} + make_interval(secs => x.duration::int) + interval '60 minutes'`;
+
+export async function setDispatchTestMode(client, enabled = config.dispatchTestMode) {
+  if (enabled) {
+    await client.query("SELECT set_config('wasla.dispatch_test_mode', 'true', true)");
+  }
+}
 
 export async function closeOldOffers(client, driverId = null) {
   await client.query(
@@ -42,7 +50,87 @@ export async function closeOldOffers(client, driverId = null) {
   );
 }
 
-export async function makeOffers(client, driverId) {
+export async function advanceDispatchRadius(client) {
+  await client.query(
+    `UPDATE shipments s
+     SET dispatch_radius_m = least(30000, s.dispatch_radius_m + 5000),
+         dispatch_radius_updated_at = now()
+     FROM platform_settings ps
+     WHERE s.status = 'searching_driver' AND s.group_id IS NULL
+       AND s.dispatch_radius_m < 30000
+       AND (s.pickup_type = 'now'
+            OR s.pickup_window_start - make_interval(mins => ps.scheduled_search_lead_minutes) <= now())
+       AND NOT EXISTS (
+         SELECT 1 FROM dispatch_offers o
+         WHERE o.shipment_id = s.id AND o.response = 'pending'
+       )
+       AND COALESCE((
+         SELECT max(COALESCE(o.responded_at, o.expires_at))
+         FROM dispatch_offers o
+         WHERE o.shipment_id = s.id AND o.sent_at >= s.dispatch_radius_updated_at
+       ), GREATEST(s.dispatch_radius_updated_at,
+         CASE WHEN s.pickup_type = 'scheduled'
+           THEN s.pickup_window_start - make_interval(mins => ps.scheduled_search_lead_minutes)
+           ELSE s.dispatch_radius_updated_at END)) <= now() - interval '3 seconds'`,
+  );
+  await client.query(
+    `UPDATE shipment_groups g
+     SET dispatch_radius_m = least(30000, g.dispatch_radius_m + 5000),
+         dispatch_radius_updated_at = now()
+     FROM platform_settings ps
+     WHERE g.dispatch_radius_m < 30000
+       AND EXISTS (
+         SELECT 1 FROM shipments s
+         WHERE s.group_id = g.id AND s.status = 'searching_driver'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM shipments s
+         WHERE s.group_id = g.id AND s.status = 'searching_driver'
+           AND s.pickup_type = 'scheduled'
+           AND s.pickup_window_start - make_interval(mins => ps.scheduled_search_lead_minutes) > now()
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM dispatch_offers o
+         WHERE o.group_id = g.id AND o.response = 'pending'
+       )
+       AND COALESCE((
+         SELECT max(COALESCE(o.responded_at, o.expires_at))
+         FROM dispatch_offers o
+         WHERE o.group_id = g.id AND o.sent_at >= g.dispatch_radius_updated_at
+       ), GREATEST(g.dispatch_radius_updated_at,
+         COALESCE((
+           SELECT min(s.pickup_window_start) - make_interval(mins => ps.scheduled_search_lead_minutes)
+           FROM shipments s
+           WHERE s.group_id = g.id AND s.status = 'searching_driver' AND s.pickup_type = 'scheduled'
+         ), g.dispatch_radius_updated_at))) <= now() - interval '3 seconds'`,
+  );
+}
+
+export async function makeOffers(client, driverId = null, testMode = config.dispatchTestMode) {
+  await setDispatchTestMode(client, testMode);
+  const vehicleTypeFilter = testMode
+    ? ''
+    : 'AND q.vehicle_type_id = v.vehicle_type_id';
+  const radiusFilter = testMode
+    ? ''
+    : 'AND ST_DWithin(dp.current_location, s.pickup_location, s.dispatch_radius_m)';
+  const payloadFilter = testMode
+    ? ''
+    : 'AND COALESCE(s.weight_kg, 0) <= v.max_payload_kg';
+  const helpersFilter = testMode
+    ? ''
+    : 'AND s.helpers_count <= dp.max_helpers';
+  const groupFitFilter = testMode ? '' : 'AND x.same_type';
+  const groupRadiusFilter = testMode
+    ? ''
+    : 'AND ST_DWithin(dp.current_location, g.pickup_location, g.dispatch_radius_m)';
+  const groupPayloadFilter = testMode
+    ? ''
+    : 'AND x.weight <= v.max_payload_kg';
+  const groupHelpersFilter = testMode
+    ? ''
+    : 'AND g.helpers_count <= dp.max_helpers';
+
   await client.query(
     `INSERT INTO dispatch_offers (shipment_id, price_quote_id, driver_id, vehicle_id, distance_to_pickup_m, expires_at)
      SELECT s.id, q.id, dp.user_id, v.id,
@@ -52,12 +140,12 @@ export async function makeOffers(client, driverId) {
      JOIN vehicles v ON v.id = dp.active_vehicle_id
      CROSS JOIN platform_settings ps
      JOIN shipments s ON s.status = 'searching_driver' AND s.group_id IS NULL
-     JOIN price_quotes q ON q.shipment_id = s.id AND q.status = 'accepted' AND q.vehicle_type_id = v.vehicle_type_id
-     WHERE dp.user_id = $1 AND dp.is_online
+     JOIN price_quotes q ON q.shipment_id = s.id AND q.status = 'accepted' ${vehicleTypeFilter}
+     WHERE ($1::bigint IS NULL OR dp.user_id = $1) AND dp.is_online
        AND dp.location_updated_at > now() - make_interval(secs => ps.location_stale_seconds)
-       AND ST_DWithin(dp.current_location, s.pickup_location, ps.dispatch_radius_m)
-       AND COALESCE(s.weight_kg, 0) <= v.max_payload_kg
-       AND s.helpers_count <= dp.max_helpers
+       ${radiusFilter}
+       ${payloadFilter}
+       ${helpersFilter}
        AND s.customer_id <> dp.user_id
        AND (s.pickup_type = 'now'
             OR s.pickup_window_start - make_interval(mins => ps.scheduled_search_lead_minutes) <= now())
@@ -69,7 +157,9 @@ export async function makeOffers(client, driverId) {
          WHERE t.driver_id = dp.user_id AND t.status NOT IN ('delivered', 'cancelled')
            AND ((s.pickup_type = 'now' AND t.planned_start_at <= now())
                 OR tstzrange(t.planned_start_at, t.planned_end_at, '[)') && tstzrange(${PLANNED_START}, ${PLANNED_END}, '[)')))
-     ORDER BY s.id`,
+     ORDER BY s.id
+     ON CONFLICT (shipment_id, driver_id)
+       WHERE response = 'pending' AND shipment_id IS NOT NULL DO NOTHING`,
     [driverId],
   );
   await client.query(
@@ -83,12 +173,12 @@ export async function makeOffers(client, driverId) {
      JOIN (SELECT DISTINCT group_id FROM shipments WHERE status = 'searching_driver' AND group_id IS NOT NULL) sg
        ON true
      JOIN shipment_groups g ON g.id = sg.group_id
-     JOIN LATERAL (${GROUP_LOAD}) x ON x.searching = x.stops AND x.same_type
-     WHERE dp.user_id = $1 AND dp.is_online
+     JOIN LATERAL (${GROUP_LOAD}) x ON x.searching = x.stops ${groupFitFilter}
+     WHERE ($1::bigint IS NULL OR dp.user_id = $1) AND dp.is_online
        AND dp.location_updated_at > now() - make_interval(secs => ps.location_stale_seconds)
-       AND ST_DWithin(dp.current_location, g.pickup_location, ps.dispatch_radius_m)
-       AND x.weight <= v.max_payload_kg
-       AND g.helpers_count <= dp.max_helpers
+       ${groupRadiusFilter}
+       ${groupPayloadFilter}
+       ${groupHelpersFilter}
        AND g.customer_id <> dp.user_id
        AND (NOT x.scheduled OR x.window_start - make_interval(mins => ps.scheduled_search_lead_minutes) <= now())
        AND NOT EXISTS (
@@ -100,33 +190,54 @@ export async function makeOffers(client, driverId) {
            AND ((NOT x.scheduled AND t.planned_start_at <= now())
                 OR tstzrange(t.planned_start_at, t.planned_end_at, '[)')
                    && tstzrange(${GROUP_START}, ${GROUP_END}, '[)')))
-     ORDER BY g.id`,
+     ORDER BY g.id
+     ON CONFLICT (group_id, driver_id)
+       WHERE response = 'pending' AND group_id IS NOT NULL DO NOTHING`,
     [driverId],
   );
 }
 
-function toOffer(row) {
+function photosOf(row, baseUrl) {
+  return (row.shipment_photos || [])
+    .map((photo) => ({
+      id: photo.id,
+      url: imageUrl(photo.storageKey, baseUrl),
+    }))
+    .filter((photo) => photo.url);
+}
+
+function toOffer(row, baseUrl) {
   return {
     id: row.offer_id,
     groupId: null,
+    testMode: config.dispatchTestMode,
     sentAt: row.sent_at,
     expiresAt: row.expires_at,
     secondsLeft: row.seconds_left,
     distanceToPickupM: row.distance_to_pickup_m,
+    customerName: row.customer_name,
+    photos: photosOf(row, baseUrl),
     ...toJob(row),
   };
 }
 
-function toGroupOffer(rows) {
+function toGroupOffer(rows, baseUrl) {
   const first = rows[0];
   const job = toJob(first);
+  const stops = rows.map((row, i) => ({
+    ...toStop(row, i + 1),
+    photos: photosOf(row, baseUrl),
+  }));
   return {
     id: first.offer_id,
     groupId: first.group_id,
+    testMode: config.dispatchTestMode,
     sentAt: first.sent_at,
     expiresAt: first.expires_at,
     secondsLeft: first.seconds_left,
     distanceToPickupM: first.distance_to_pickup_m,
+    customerName: first.customer_name,
+    photos: stops.flatMap((stop) => stop.photos),
     shipmentId: null,
     cargoCategoryId: null,
     sizeOptionId: null,
@@ -150,18 +261,23 @@ function toGroupOffer(rows) {
     cashToCollect: first.total_cash,
     cashAtPickup: first.cash_at_pickup,
     stopsCount: Number(first.stops_count),
-    stops: rows.map((row, i) => toStop(row, i + 1)),
+    stops,
   };
 }
 
-export async function listOffers(client, driverId) {
+export async function listOffers(client, driverId, baseUrl) {
   const { rows } = await client.query(
     `SELECT o.id AS offer_id, o.sent_at, o.expires_at, o.distance_to_pickup_m,
             GREATEST(0, ceil(extract(epoch FROM o.expires_at - now())))::int AS seconds_left,
-            ${JOB_COLUMNS}
+            cu.full_name AS customer_name, images.shipment_photos, ${JOB_COLUMNS}
      FROM dispatch_offers o
      JOIN shipments s ON s.id = o.shipment_id
      JOIN price_quotes q ON q.id = o.price_quote_id
+     JOIN users cu ON cu.id = s.customer_id
+     LEFT JOIN LATERAL (
+       SELECT json_agg(json_build_object('id', i.id, 'storageKey', i.storage_key) ORDER BY i.id) AS shipment_photos
+       FROM shipment_item_images i WHERE i.shipment_id = s.id
+     ) images ON true
      WHERE o.driver_id = $1 AND o.response = 'pending' AND o.expires_at > now() AND s.status = 'searching_driver'
      ORDER BY o.distance_to_pickup_m, o.id`,
     [driverId],
@@ -169,11 +285,17 @@ export async function listOffers(client, driverId) {
   const { rows: grouped } = await client.query(
     `SELECT o.id AS offer_id, o.group_id, o.sent_at, o.expires_at, o.distance_to_pickup_m,
             GREATEST(0, ceil(extract(epoch FROM o.expires_at - now())))::int AS seconds_left,
-            ${JOB_COLUMNS}, ${GROUP_TOTALS},
+            cu.full_name AS customer_name, images.shipment_photos, ${JOB_COLUMNS}, ${GROUP_TOTALS},
             bool_and(s.status = 'searching_driver') OVER w AS searching
      FROM dispatch_offers o
      JOIN shipments s ON s.group_id = o.group_id AND s.status <> 'cancelled'
      JOIN price_quotes q ON q.shipment_id = s.id AND q.status = 'accepted'
+     JOIN shipment_groups g ON g.id = o.group_id
+     JOIN users cu ON cu.id = g.customer_id
+     LEFT JOIN LATERAL (
+       SELECT json_agg(json_build_object('id', i.id, 'storageKey', i.storage_key) ORDER BY i.id) AS shipment_photos
+       FROM shipment_item_images i WHERE i.shipment_id = s.id
+     ) images ON true
      WHERE o.driver_id = $1 AND o.response = 'pending' AND o.expires_at > now()
      WINDOW w AS (PARTITION BY o.id)
      ORDER BY o.id, s.delivery_sequence`,
@@ -186,11 +308,13 @@ export async function listOffers(client, driverId) {
     }
     groups.get(row.offer_id).push(row);
   }
-  return [...rows.map(toOffer), ...[...groups.values()].map(toGroupOffer)]
+  return [...rows.map((row) => toOffer(row, baseUrl)),
+    ...[...groups.values()].map((items) => toGroupOffer(items, baseUrl))]
     .sort((a, b) => a.distanceToPickupM - b.distanceToPickupM || Number(a.id) - Number(b.id));
 }
 
 export async function createTrip(client, offer) {
+  await setDispatchTestMode(client);
   const { rows: [trip] } = await client.query(
     `INSERT INTO trips (shipment_id, driver_id, vehicle_id, price_quote_id, fare_amount, commission_rate,
                         planned_start_at, planned_end_at)
@@ -213,6 +337,7 @@ export async function createTrip(client, offer) {
 }
 
 export async function createGroupTrips(client, offer) {
+  await setDispatchTestMode(client);
   await client.query(
     `INSERT INTO trips (shipment_id, driver_id, vehicle_id, price_quote_id, fare_amount, commission_rate,
                         planned_start_at, planned_end_at)

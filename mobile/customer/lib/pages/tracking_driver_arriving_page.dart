@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:main/components/customer_tracking_map.dart';
 import 'package:main/components/main_button.dart';
 import 'package:main/models/shipment.dart';
 import 'package:main/pages/tracking_in_transit_page.dart';
@@ -22,6 +23,7 @@ class _TrackingDriverArrivingPageState
     extends State<TrackingDriverArrivingPage> {
   final _service = ShipmentService();
   Shipment? _shipment;
+  ShipmentTracking? _tracking;
   String? _errorMessage;
   bool _isLoading = true;
   Timer? _timer;
@@ -30,7 +32,10 @@ class _TrackingDriverArrivingPageState
   void initState() {
     super.initState();
     _load();
-    _timer = Timer.periodic(const Duration(seconds: 10), (_) => _load(silent: true));
+    _timer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _load(silent: true),
+    );
   }
 
   @override
@@ -44,9 +49,16 @@ class _TrackingDriverArrivingPageState
     if (!silent) setState(() => _isLoading = true);
     try {
       final shipment = await _service.getShipment(widget.shipmentId!);
+      ShipmentTracking? tracking;
+      try {
+        tracking = await _service.getTracking(widget.shipmentId!);
+      } on ShipmentApiException {
+        tracking = null;
+      }
       if (!mounted) return;
       setState(() {
         _shipment = shipment;
+        _tracking = tracking;
         _errorMessage = null;
       });
       if (shipment.status == 'delivered' || shipment.status == 'cancelled') {
@@ -78,6 +90,13 @@ class _TrackingDriverArrivingPageState
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       children: [
                         const SizedBox(height: 16),
+                        if (shipment != null)
+                          CustomerTrackingMap(
+                            shipment: shipment,
+                            tracking: _tracking,
+                            height: 260,
+                          ),
+                        const SizedBox(height: 12),
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
@@ -86,11 +105,23 @@ class _TrackingDriverArrivingPageState
                           ),
                           child: Column(
                             children: [
-                              Text('Driver is arriving', style: AppTypography.headingSm, textAlign: TextAlign.center),
+                              Text(
+                                'Driver is arriving',
+                                style: AppTypography.headingSm,
+                                textAlign: TextAlign.center,
+                              ),
                               const SizedBox(height: 8),
-                              Text(trip?.driverName ?? 'Waiting for driver', style: AppTypography.bodyMd, textAlign: TextAlign.center),
+                              Text(
+                                trip?.driverName ?? 'Waiting for driver',
+                                style: AppTypography.bodyMd,
+                                textAlign: TextAlign.center,
+                              ),
                               if (trip?.vehicleTypeId != null)
-                                Text('Vehicle type ${trip!.vehicleTypeId}', style: AppTypography.bodyXs, textAlign: TextAlign.center),
+                                Text(
+                                  'Vehicle type ${trip!.vehicleTypeId}',
+                                  style: AppTypography.bodyXs,
+                                  textAlign: TextAlign.center,
+                                ),
                             ],
                           ),
                         ),
@@ -105,14 +136,20 @@ class _TrackingDriverArrivingPageState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               _row('Pickup', shipment?.pickup?.address ?? '—'),
-                              _row('Drop-off', shipment?.dropoff?.address ?? '—'),
+                              _row(
+                                'Drop-off',
+                                shipment?.dropoff?.address ?? '—',
+                              ),
                               _row('Status', shipment?.status ?? '—'),
                             ],
                           ),
                         ),
                         if (_errorMessage != null) ...[
                           const SizedBox(height: 12),
-                          Text(_errorMessage!, style: const TextStyle(color: AppColors.accent)),
+                          Text(
+                            _errorMessage!,
+                            style: const TextStyle(color: AppColors.accent),
+                          ),
                         ],
                       ],
                     ),
@@ -124,7 +161,8 @@ class _TrackingDriverArrivingPageState
                 variant: WaslaButtonVariant.primary,
                 onPressed: () => Navigator.of(context).push(
                   TAMaterialRoute<void>(
-                    builder: (_) => TrackingInTransitPage(shipmentId: widget.shipmentId),
+                    builder: (_) =>
+                        TrackingInTransitPage(shipmentId: widget.shipmentId),
                   ),
                 ),
               ),
@@ -155,13 +193,13 @@ class _TrackingDriverArrivingPageState
   }
 
   Widget _row(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(width: 84, child: Text(label, style: AppTypography.bodyXs)),
-            Expanded(child: Text(value, style: AppTypography.bodySm)),
-          ],
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 84, child: Text(label, style: AppTypography.bodyXs)),
+        Expanded(child: Text(value, style: AppTypography.bodySm)),
+      ],
+    ),
+  );
 }

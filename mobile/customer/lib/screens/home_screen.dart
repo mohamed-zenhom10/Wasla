@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:main/components/app_page_header.dart';
+import 'package:main/components/customer_tracking_map.dart';
 import 'package:main/components/main_button.dart';
 import 'package:main/models/shipment.dart';
 import 'package:main/pages/cargo_category_page.dart';
@@ -226,7 +227,11 @@ class HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              const _MapPreview(),
+              CustomerMapPreview(
+                pickup: _pickupPoint,
+                destination: _destinationPoint,
+                height: 250,
+              ),
               const SizedBox(height: 20),
               const Text(
                 'Where are you moving\nsomething?',
@@ -424,131 +429,4 @@ class _LocationInput extends StatelessWidget {
       ],
     );
   }
-}
-
-class _MapPreview extends StatelessWidget {
-  const _MapPreview();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 192,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Stack(
-          children: [
-            const Positioned.fill(child: CustomPaint(painter: _MapPainter())),
-            const Align(
-              alignment: Alignment(-0.15, -0.52),
-              child: Text('NASR CITY'),
-            ),
-            const Align(alignment: Alignment(0, 0.54), child: Text('MAADI')),
-            const Align(
-              alignment: Alignment(-0.12, -0.05),
-              child: Text('El Nasr Road', style: TextStyle(fontSize: 10)),
-            ),
-            Positioned(
-              top: 12,
-              right: 12,
-              child: Material(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(10),
-                child: IconButton(
-                  tooltip: 'Recenter map',
-                  onPressed: () {},
-                  icon: const Icon(Icons.my_location_outlined, size: 20),
-                ),
-              ),
-            ),
-            Positioned(
-              left: 10,
-              bottom: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'Closest truck · 8 min away',
-                  style: TextStyle(fontSize: 10),
-                ),
-              ),
-            ),
-            const Align(
-              alignment: Alignment(-0.48, -0.15),
-              child: Icon(Icons.local_shipping_outlined, size: 22),
-            ),
-            const Align(
-              alignment: Alignment(0.86, 0.5),
-              child: Icon(Icons.local_shipping_outlined, size: 22),
-            ),
-            const Align(
-              alignment: Alignment(0.62, 0.12),
-              child: Icon(Icons.location_on, color: AppColors.accent, size: 32),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MapPainter extends CustomPainter {
-  const _MapPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final background = Paint()..color = AppColors.light;
-    canvas.drawRect(Offset.zero & size, background);
-
-    final roadPaint = Paint()
-      ..color = AppColors.white
-      ..strokeWidth = 25
-      ..style = PaintingStyle.stroke;
-    final road = Path()
-      ..moveTo(size.width * .08, -10)
-      ..cubicTo(
-        size.width * .36,
-        size.height * .28,
-        size.width * .08,
-        size.height * .62,
-        size.width * .02,
-        size.height + 10,
-      );
-    canvas.drawPath(road, roadPaint);
-
-    final crossRoad = Paint()
-      ..color = AppColors.white
-      ..strokeWidth = 18
-      ..style = PaintingStyle.stroke;
-    for (var i = 0; i < 4; i++) {
-      final x = size.width * (.35 + i * .19);
-      canvas.drawLine(Offset(x, 0), Offset(x - 30, size.height), crossRoad);
-    }
-
-    final routePaint = Paint()
-      ..color = AppColors.accent
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final route = Path()
-      ..moveTo(size.width * .2, size.height * .45)
-      ..lineTo(size.width * .4, size.height * .48)
-      ..lineTo(size.width * .49, size.height * .57)
-      ..lineTo(size.width * .42, size.height * .69)
-      ..lineTo(size.width * .88, size.height * .78);
-    canvas.drawPath(route, routePaint);
-
-    final pickup = Paint()..color = AppColors.darkGreen;
-    canvas.drawCircle(Offset(size.width * .28, size.height * .48), 15, pickup);
-    final center = Paint()..color = AppColors.white;
-    canvas.drawCircle(Offset(size.width * .28, size.height * .48), 4, center);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

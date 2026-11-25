@@ -13,6 +13,7 @@ import {
 } from '../lib/shipments.js';
 import { BEFORE_LOADING, loadTracking, lockLiveTrip } from '../lib/trips.js';
 import { cleanCouponCode, checkCoupon, minOrderError } from '../lib/coupons.js';
+import { makeOffers } from '../lib/dispatch.js';
 
 const router = Router();
 const PAGE_SIZE = 20;
@@ -273,6 +274,7 @@ router.post('/:id/request', async (req, res) => {
       });
     }
     await client.query("UPDATE shipments SET status = 'searching_driver' WHERE id = $1", [id]);
+    await makeOffers(client);
   });
   await reply(req, res, id);
 });
