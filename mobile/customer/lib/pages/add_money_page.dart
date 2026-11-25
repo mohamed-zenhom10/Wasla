@@ -8,7 +8,9 @@ import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class AddMoneyPage extends StatefulWidget {
-  const AddMoneyPage({super.key});
+  const AddMoneyPage({super.key, this.onSubmitted});
+
+  final VoidCallback? onSubmitted;
 
   @override
   State<AddMoneyPage> createState() => _AddMoneyPageState();
@@ -128,6 +130,7 @@ class _AddMoneyPageState extends State<AddMoneyPage> {
         _successMessage = 'Top-up request submitted. Status: ${topup.status}.';
         _receiptBytes = null;
       });
+      widget.onSubmitted?.call();
     } catch (error) {
       if (mounted) setState(() => _error = WalletService.readableError(error));
     } finally {
@@ -194,10 +197,10 @@ class _AddMoneyPageState extends State<AddMoneyPage> {
               ],
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _isSubmitting ? null : _submit,
-              child: Text(_isSubmitting ? 'Submitting...' : 'ابعت طلب الشحن'),
-            ),
+              ElevatedButton(
+                onPressed: _isSubmitting ? null : _submit,
+                child: Text(_isSubmitting ? 'Submitting...' : 'Submit top-up'),
+              ),
           ],
         ],
       ),

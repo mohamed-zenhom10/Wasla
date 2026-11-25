@@ -9,9 +9,11 @@ import 'package:main/pages/messages_page.dart';
 import 'package:main/pages/profile_page.dart';
 import 'package:main/pages/your_activity_page.dart';
 import 'package:main/pages/wallet_page.dart';
+import 'package:main/models/wallet.dart';
 import 'package:main/services/auth_service.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/services/shipment_service.dart';
+import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -28,7 +30,9 @@ class HomeScreenState extends State<HomeScreen> {
   final _pickupController = TextEditingController();
   final _destinationController = TextEditingController();
   final ShipmentService _service = ShipmentService();
+  final WalletService _walletService = WalletService();
   ShipmentCatalog? _catalog;
+  Wallet? _wallet;
   int _selectedTab = 0;
   String? _customerName;
   LatLng? _pickupPoint;
@@ -61,6 +65,7 @@ class HomeScreenState extends State<HomeScreen> {
     _selectedTab = widget.initialTab.clamp(0, _tabNames.length - 1);
     if (!widget.isPreview) _loadCustomerName();
     _loadCatalog();
+    _loadWallet();
   }
 
   Future<void> _loadCustomerName() async {
@@ -75,6 +80,15 @@ class HomeScreenState extends State<HomeScreen> {
       if (mounted) setState(() => _catalog = catalog);
     } catch (error) {
       if (mounted) setState(() => _catalog = null);
+    }
+  }
+
+  Future<void> _loadWallet() async {
+    try {
+      final wallet = await _walletService.getWallet();
+      if (mounted) setState(() => _wallet = wallet);
+    } catch (error) {
+      if (mounted) setState(() => _wallet = null);
     }
   }
 
@@ -126,7 +140,19 @@ class HomeScreenState extends State<HomeScreen> {
       ..dropoffLatitude = _destinationPoint?.latitude
       ..dropoffLongitude = _destinationPoint?.longitude
       ..useAiEstimate = useAiEstimate
-      ..catalog = _catalog;
+      ..catalog = _catalog
+      ..paymentMethod = _wallet?.defaultPaymentMethod ?? 'cash';
+    if (draft.paymentMethod == 'wallet') {
+      final balance = double.tryParse(_wallet?.balance ?? '0') ?? 0;
+      if (balance < 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Top up your wallet before requesting a shipment.')),
+          );
+        }
+        return;
+      }
+    }
     setState(() => _activeBookingDraft = draft);
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),

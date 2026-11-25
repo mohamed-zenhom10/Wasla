@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/app_page_header.dart';
+import 'package:main/models/wallet.dart';
 import 'package:main/pages/add_money_page.dart';
 import 'package:main/pages/payment_methods_page.dart';
 import 'package:main/pages/wallet_transactions_page.dart';
+import 'package:main/pages/payout_account_page.dart';
+import 'package:main/pages/top_up_history_page.dart';
 import 'package:main/pages/withdraw_balance_page.dart';
 import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
@@ -18,7 +21,7 @@ class _WalletPageState extends State<WalletPage> {
   final _service = WalletService();
   bool _isLoading = true;
   String? _error;
-  dynamic _wallet;
+  Wallet? _wallet;
 
   @override
   void initState() {
@@ -56,9 +59,9 @@ class _WalletPageState extends State<WalletPage> {
           else if (_error != null)
             Text(_error!, style: const TextStyle(color: AppColors.accent))
           else ...[
-            _WalletBalanceCard(wallet: _wallet),
+            _WalletBalanceCard(wallet: _wallet!),
             const SizedBox(height: 16),
-            if (_wallet.isNegative) ...[
+            if (_wallet!.isNegative) ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -68,7 +71,7 @@ class _WalletPageState extends State<WalletPage> {
                   border: Border.all(color: AppColors.accent),
                 ),
                 child: Text(
-                  'You owe ${_wallet.balance} EGP. Top up your wallet before creating another shipment.',
+                  'You owe ${_wallet!.balance} EGP. Top up your wallet before creating another shipment.',
                   style: AppTypography.bodySm,
                 ),
               ),
@@ -79,10 +82,12 @@ class _WalletPageState extends State<WalletPage> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: (_) => const AddMoneyPage()),
-                      );
-                      if (mounted) _load();
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => AddMoneyPage(onSubmitted: () => _load()),
+                  ),
+                );
+                if (mounted) _load();
                     },
                     child: const Text('Add money'),
                   ),
@@ -121,21 +126,51 @@ class _WalletPageState extends State<WalletPage> {
               },
               child: const Text('Payment methods'),
             ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const WalletTopUpsPage()),
+                );
+                if (mounted) _load();
+              },
+              child: const Text('Top-up history'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const WithdrawBalancePage()),
+                );
+                if (mounted) _load();
+              },
+              child: const Text('Withdrawal history'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const PayoutAccountPage()),
+                );
+                if (mounted) _load();
+              },
+              child: const Text('Payout account'),
+            ),
             const SizedBox(height: 24),
-            if (_wallet.pendingTopups.count > 0) ...[
+            if (_wallet!.pendingTopups.count > 0) ...[
               Text('Pending top-ups', style: AppTypography.headingSm),
               const SizedBox(height: 8),
               Text(
-                '${_wallet.pendingTopups.count} request(s) awaiting confirmation: ${_wallet.pendingTopups.amount} EGP',
+                '${_wallet!.pendingTopups.count} request(s) awaiting confirmation: ${_wallet!.pendingTopups.amount} EGP',
                 style: AppTypography.bodyMd,
               ),
               const SizedBox(height: 16),
             ],
-            if (_wallet.pendingWithdrawal != null) ...[
+            if (_wallet!.pendingWithdrawal != null) ...[
               Text('Pending withdrawal', style: AppTypography.headingSm),
               const SizedBox(height: 8),
               Text(
-                'Reserved: ${_wallet.pendingWithdrawal!.amount} EGP. Available: ${_wallet.available} EGP.',
+                'Reserved: ${_wallet!.pendingWithdrawal!.amount} EGP. Available: ${_wallet!.available} EGP.',
                 style: AppTypography.bodyMd,
               ),
             ],
@@ -149,7 +184,7 @@ class _WalletPageState extends State<WalletPage> {
 class _WalletBalanceCard extends StatelessWidget {
   const _WalletBalanceCard({required this.wallet});
 
-  final dynamic wallet;
+  final Wallet wallet;
 
   @override
   Widget build(BuildContext context) {
@@ -181,6 +216,11 @@ class _WalletBalanceCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Top-up method: InstaPay',
+            style: AppTypography.bodyXs.copyWith(color: AppColors.white.withValues(alpha: 0.78)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Default payment method: ${wallet.defaultPaymentMethod ?? 'cash'}',
             style: AppTypography.bodyXs.copyWith(color: AppColors.white.withValues(alpha: 0.78)),
           ),
         ],

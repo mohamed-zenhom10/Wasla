@@ -7,6 +7,7 @@ import 'package:main/pages/ai_estimating_page.dart';
 import 'package:main/pages/vehicle_small_page.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/services/shipment_service.dart';
+import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class CaptureCargoPage extends StatefulWidget {
@@ -19,9 +20,10 @@ class CaptureCargoPage extends StatefulWidget {
 }
 
 class _CaptureCargoPageState extends State<CaptureCargoPage> {
-  final _picker = ImagePicker();
-  final _service = ShipmentService();
-  bool _isSubmitting = false;
+final _picker = ImagePicker();
+final _service = ShipmentService();
+final _walletService = WalletService();
+bool _isSubmitting = false;
   String? _errorMessage;
   String? _errorField;
 
@@ -97,15 +99,23 @@ class _CaptureCargoPageState extends State<CaptureCargoPage> {
       );
       return;
     }
-    if (widget.draft.photos.isEmpty &&
-        (widget.draft.shipment?.photos.isEmpty ?? true)) {
-      _showError(
-        'Capture at least one cargo photo to continue.',
-        field: 'photos',
-      );
-      return;
-    }
-    setState(() {
+if (widget.draft.photos.isEmpty &&
+(widget.draft.shipment?.photos.isEmpty ?? true)) {
+_showError(
+'Capture at least one cargo photo to continue.',
+field: 'photos',
+);
+return;
+}
+if (widget.draft.paymentMethod == 'wallet' &&
+    !await _walletService.hasUsableBalance()) {
+_showError(
+'Your wallet balance is negative. Top up your wallet before requesting a shipment.',
+field: 'paymentMethod',
+);
+return;
+}
+setState(() {
       _isSubmitting = true;
       _errorMessage = null;
       _errorField = null;
@@ -190,9 +200,12 @@ class _CaptureCargoPageState extends State<CaptureCargoPage> {
         if (mounted) setState(() {});
       }
 
-      shipment = await _service.requestQuotes(shipment);
-      widget.draft.shipment = shipment;
-      if (!mounted) return;
+shipment = await _service.requestQuotes(shipment);
+widget.draft.shipment = shipment;
+if (widget.draft.paymentMethod == 'wallet') {
+await _walletService.getWallet();
+}
+if (!mounted) return;
       final nextPage = widget.draft.useAiEstimate
           ? AiEstimatingPage(draft: widget.draft)
           : VehiclesSmallPage(draft: widget.draft);

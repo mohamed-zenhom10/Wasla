@@ -5,6 +5,7 @@ import 'package:main/pages/shipment_details_page.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/services/language_service.dart';
 import 'package:main/services/shipment_service.dart';
+import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class VehiclesSmallPage extends StatefulWidget {
@@ -17,8 +18,9 @@ class VehiclesSmallPage extends StatefulWidget {
 }
 
 class _VehiclesSmallPageState extends State<VehiclesSmallPage> {
-  final _service = ShipmentService();
-  String? _selectedQuoteId;
+final _service = ShipmentService();
+final _walletService = WalletService();
+String? _selectedQuoteId;
   String? _errorMessage;
   String? _errorCode;
   bool _isLoading = false;
@@ -64,15 +66,22 @@ class _VehiclesSmallPageState extends State<VehiclesSmallPage> {
     for (final quote in shipment.quotes) {
       if (quote.id == _selectedQuoteId) selected = quote;
     }
-    if (selected == null) {
-      _showError('Select an available quote.');
-      return;
-    }
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-      _errorCode = null;
-    });
+if (selected == null) {
+_showError('Select an available quote.');
+return;
+}
+if (widget.draft.paymentMethod == 'wallet' &&
+    !await _walletService.hasUsableBalance()) {
+_showError(
+'Your wallet balance is negative. Top up your wallet before accepting this quote.',
+);
+return;
+}
+setState(() {
+_isLoading = true;
+_errorMessage = null;
+_errorCode = null;
+});
     try {
       final updated = await _service.acceptQuote(
         shipment: shipment,
@@ -85,9 +94,12 @@ class _VehiclesSmallPageState extends State<VehiclesSmallPage> {
         );
         return;
       }
-      widget.draft.selectedQuote = updated.acceptedQuote;
-      if (!mounted) return;
-      Navigator.of(context).push(
+widget.draft.selectedQuote = updated.acceptedQuote;
+if (widget.draft.paymentMethod == 'wallet') {
+await _walletService.getWallet();
+}
+if (!mounted) return;
+Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => ShipmentDetailsPage(
             shipmentId: updated.id,

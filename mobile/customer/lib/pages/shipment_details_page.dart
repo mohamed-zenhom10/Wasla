@@ -4,10 +4,12 @@ import 'package:main/models/shipment.dart';
 import 'package:main/pages/driver_matching_page.dart';
 import 'package:main/pages/cargo_category_page.dart';
 import 'package:main/screens/home_screen.dart';
+import 'package:main/pages/review_tags_page.dart';
 import 'package:main/pages/vehicle_small_page.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/services/language_service.dart';
 import 'package:main/services/shipment_service.dart';
+import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
 
 class ShipmentDetailsPage extends StatefulWidget {
@@ -27,8 +29,9 @@ class ShipmentDetailsPage extends StatefulWidget {
 }
 
 class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
-  final _service = ShipmentService();
-  Shipment? _shipment;
+final _service = ShipmentService();
+final _walletService = WalletService();
+Shipment? _shipment;
   String? _errorMessage;
   bool _isLoading = false;
 
@@ -53,19 +56,30 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
     }
   }
 
-  Future<void> _requestShipment() async {
-    final shipment = _shipment;
-    if (shipment == null || _isLoading) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    try {
-      final updated = await _service.requestShipment(shipment);
-      if (!mounted) return;
-      final homeState = context.findAncestorStateOfType<HomeScreenState>();
-      homeState?.markShipmentSubmitted(updated.id);
-      setState(() => _shipment = updated);
+Future<void> _requestShipment() async {
+final shipment = _shipment;
+if (shipment == null || _isLoading) return;
+if (shipment.paymentMethod == 'wallet' &&
+    !await _walletService.hasUsableBalance()) {
+setState(() {
+_errorMessage =
+'Your wallet balance is negative. Top up your wallet before requesting this shipment.';
+});
+return;
+}
+setState(() {
+_isLoading = true;
+_errorMessage = null;
+});
+try {
+final updated = await _service.requestShipment(shipment);
+if (shipment.paymentMethod == 'wallet') {
+await _walletService.getWallet();
+}
+if (!mounted) return;
+final homeState = context.findAncestorStateOfType<HomeScreenState>();
+homeState?.markShipmentSubmitted(updated.id);
+setState(() => _shipment = updated);
       Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => DriverMatchingPage(shipmentId: updated.id),
@@ -78,7 +92,15 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
     }
   }
 
-  Future<void> _withdrawPrice() async {
+  Future<void> _openReviewTags() async {
+Navigator.of(context).push(
+MaterialPageRoute<void>(
+builder: (_) => const ReviewTagsPage(),
+),
+);
+}
+
+Future<void> _withdrawPrice() async {
     final shipment = _shipment;
     if (shipment == null || shipment.acceptedQuote == null || _isLoading) {
       return;
@@ -265,10 +287,19 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
                       ),
                   ]),
                 ],
-                const SizedBox(height: 18),
-                if (!widget.readOnly &&
-                    shipment.status != 'cancelled' &&
-                    shipment.acceptedQuote != null) ...[
+      if (!widget.readOnly && shipment.status == 'delivered') ...[
+        WaslaButton(
+          text: 'How was your move?',
+          variant: WaslaButtonVariant.secondary,
+          isLoading: _isLoading,
+          onPressed: _isLoading ? null : _openReviewTags,
+        ),
+        const SizedBox(height: 8),
+      ],
+      const SizedBox(height: 18),
+      if (!widget.readOnly &&
+      shipment.status != 'cancelled' &&
+      shipment.acceptedQuote != null) ...[
                   if (shipment.status != 'searching_driver' &&
                       shipment.status != 'driver_assigned' &&
                       shipment.status != 'in_progress' &&

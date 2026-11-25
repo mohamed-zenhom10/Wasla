@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/app_page_header.dart';
+import 'package:main/models/wallet.dart';
 import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
 
@@ -16,8 +17,11 @@ class _WithdrawBalancePageState extends State<WithdrawBalancePage> {
 
   bool _isLoading = true;
   String? _error;
-  dynamic _wallet;
-  List<dynamic> _withdrawals = [];
+  Wallet? _wallet;
+  ({List<WalletWithdrawal> items, bool hasMore}) _withdrawals = (
+    items: const <WalletWithdrawal>[],
+    hasMore: false,
+  );
   bool _isSubmitting = false;
 
   @override
@@ -39,11 +43,11 @@ class _WithdrawBalancePageState extends State<WithdrawBalancePage> {
     });
     try {
       final wallet = await _service.getWallet();
-      final withdrawals = await _service.getWithdrawals(page: 1);
+      final result = await _service.getWithdrawals(page: 1);
       if (!mounted) return;
       setState(() {
         _wallet = wallet;
-        _withdrawals = withdrawals;
+        _withdrawals = result;
       });
     } catch (error) {
       if (mounted) setState(() => _error = WalletService.readableError(error));
@@ -54,9 +58,17 @@ class _WithdrawBalancePageState extends State<WithdrawBalancePage> {
 
   Future<void> _submit() async {
     final amount = double.tryParse(_amountController.text.trim());
-    final available = double.tryParse(_wallet?.available?.toString() ?? '0') ?? 0;
+    final available = double.tryParse(_wallet!.available.toString()) ?? 0;
     if (amount == null || amount <= 0 || amount > available) {
       setState(() => _error = 'Enter an amount up to $available.');
+      return;
+    }
+    final account = await _service.getPayoutAccount();
+    if (!mounted) return;
+    if (account?.status == 'pending' || account?.status == 'rejected') {
+      setState(() {
+        _error = 'Your payout account must be approved before withdrawing.';
+      });
       return;
     }
     setState(() {
@@ -119,10 +131,10 @@ class _WithdrawBalancePageState extends State<WithdrawBalancePage> {
             const SizedBox(height: 24),
             Text('Withdrawal history', style: AppTypography.headingSm),
             const SizedBox(height: 8),
-            for (final item in _withdrawals) ...[
+            for (final item in _withdrawals.items) ...[
               ListTile(
                 title: Text('${item.amount} EGP'),
-                subtitle: Text('${item.status}'),
+                subtitle: Text(item.status),
                 trailing: item.status == 'requested'
                     ? TextButton(
                         onPressed: () => _cancel(item.id),

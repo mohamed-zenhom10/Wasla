@@ -86,13 +86,6 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
             ],
             _NegativeBalanceWarning(wallet: _wallet),
             const SizedBox(height: 12),
-            _PaymentMethodCard(
-              title: 'Wallet',
-              subtitle: 'Pay from your Wasla wallet',
-              selected: _selectedMethod == 'wallet',
-              enabled: !_isSaving,
-              onTap: () => _select('wallet'),
-            ),
             const SizedBox(height: 10),
             _PaymentMethodCard(
               title: 'Cash',

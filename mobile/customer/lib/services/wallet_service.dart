@@ -49,6 +49,11 @@ class WalletService {
     throw Exception('Wallet response is invalid.');
   }
 
+  Future<bool> hasUsableBalance() async {
+    final wallet = await getWallet();
+    return !wallet.isNegative;
+  }
+
   Future<Wallet> setPaymentMethod(String? method) async {
     final response = await AuthService.apiRequest(
       method: 'PUT',
@@ -80,29 +85,22 @@ class WalletService {
     return (items: list, hasMore: response['hasMore'] == true);
   }
 
-  Future<List<WalletTopup>> getTopups({int page = 1}) async {
+  Future<({List<WalletTopup> items, bool hasMore})> getTopups({
+    int page = 1,
+  }) async {
     final response = await AuthService.apiRequest(
       method: 'GET',
       endpoint: '/me/wallet/topups',
       query: {'page': '$page'},
     );
     final items = response['topups'];
-    if (items is List) {
-      return items
-          .whereType<Map>()
-          .map((item) => WalletTopup.fromJson(Map<String, dynamic>.from(item)))
-          .toList();
-    }
-    return const [];
-  }
-
-  Future<bool> hasMoreTopups(int page) async {
-    final response = await AuthService.apiRequest(
-      method: 'GET',
-      endpoint: '/me/wallet/topups',
-      query: {'page': '$page'},
-    );
-    return response['hasMore'] == true;
+    final list = items is List
+        ? items
+            .whereType<Map>()
+            .map((item) => WalletTopup.fromJson(Map<String, dynamic>.from(item)))
+            .toList()
+        : <WalletTopup>[];
+    return (items: list, hasMore: response['hasMore'] == true);
   }
 
   Future<WalletTopup> createTopup({
@@ -129,29 +127,57 @@ class WalletService {
     throw Exception('Top-up response is invalid.');
   }
 
-  Future<List<WalletWithdrawal>> getWithdrawals({int page = 1}) async {
+  Future<({List<WalletWithdrawal> items, bool hasMore})> getWithdrawals({
+    int page = 1,
+  }) async {
     final response = await AuthService.apiRequest(
       method: 'GET',
       endpoint: '/me/wallet/withdrawals',
       query: {'page': '$page'},
     );
     final items = response['withdrawals'];
-    if (items is List) {
-      return items
-          .whereType<Map>()
-          .map((item) => WalletWithdrawal.fromJson(Map<String, dynamic>.from(item)))
-          .toList();
-    }
-    return const [];
+    final list = items is List
+        ? items
+            .whereType<Map>()
+            .map((item) => WalletWithdrawal.fromJson(Map<String, dynamic>.from(item)))
+            .toList()
+        : <WalletWithdrawal>[];
+    return (items: list, hasMore: response['hasMore'] == true);
   }
 
-  Future<bool> hasMoreWithdrawals(int page) async {
+  Future<WalletPayoutAccount?> getPayoutAccount() async {
     final response = await AuthService.apiRequest(
       method: 'GET',
-      endpoint: '/me/wallet/withdrawals',
-      query: {'page': '$page'},
+      endpoint: '/me/payout-account',
     );
-    return response['hasMore'] == true;
+    final account = response['payoutAccount'];
+    if (account is Map) {
+      return WalletPayoutAccount.fromJson(Map<String, dynamic>.from(account));
+    }
+    return null;
+  }
+
+  Future<WalletPayoutAccount?> savePayoutAccount({
+    required String method,
+    required String holderName,
+    required String bankName,
+    required String accountNumber,
+  }) async {
+    final response = await AuthService.apiRequest(
+      method: 'PUT',
+      endpoint: '/me/payout-account',
+      body: {
+        'method': method,
+        'holderName': holderName,
+        'bankName': bankName,
+        'accountNumber': accountNumber,
+      },
+    );
+    final account = response['payoutAccount'];
+    if (account is Map) {
+      return WalletPayoutAccount.fromJson(Map<String, dynamic>.from(account));
+    }
+    return getPayoutAccount();
   }
 
   Future<WalletWithdrawal> createWithdrawal({required String amount}) async {

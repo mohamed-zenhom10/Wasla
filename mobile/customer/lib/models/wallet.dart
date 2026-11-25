@@ -103,6 +103,48 @@ class WalletTransaction {
       );
 }
 
+class WalletPayoutAccount {
+  const WalletPayoutAccount({
+    required this.method,
+    required this.holderName,
+    required this.bankName,
+    required this.accountLast4,
+    this.status,
+  });
+
+  final String method;
+  final String holderName;
+  final String bankName;
+  final String accountLast4;
+  final String? status;
+
+  factory WalletPayoutAccount.fromJson(Map<String, dynamic> json) =>
+      WalletPayoutAccount(
+        method: json['method']?.toString() ?? '',
+        holderName: json['holderName']?.toString() ?? '',
+        bankName: json['bankName']?.toString() ?? '',
+        accountLast4:
+            json['accountLast4']?.toString() ?? json['accountNumber']?.toString() ?? '',
+        status: json['status']?.toString(),
+      );
+}
+
+class WalletPayoutAccountResponse {
+  const WalletPayoutAccountResponse({required this.payoutAccount});
+
+  final WalletPayoutAccount? payoutAccount;
+
+  factory WalletPayoutAccountResponse.fromJson(
+    Map<String, dynamic> json,
+  ) => WalletPayoutAccountResponse(
+        payoutAccount: json['payoutAccount'] is Map
+            ? WalletPayoutAccount.fromJson(
+                Map<String, dynamic>.from(json['payoutAccount'] as Map),
+              )
+            : null,
+      );
+}
+
 class WalletPageData {
   const WalletPageData({
     required this.items,
