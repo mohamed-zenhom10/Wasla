@@ -20,5 +20,12 @@ cus acc
 0123456789Aa
 
 
-
 flutter build apk --release --dart-define=NATIONAL_ID_OCR_API_KEY=YOUR_KEY
+
+
+driver
+flutter run -d edge --web-port 5173 --dart-define-from-file=tomtom-key.json
+
+
+cus
+flutter run -d edge --web-port 5173 --dart-define-from-file=tomtom-key.json
