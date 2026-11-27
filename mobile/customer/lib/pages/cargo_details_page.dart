@@ -285,18 +285,19 @@ class _CargoDetailsPageState extends State<CargoDetailsPage> {
                   setState(() => widget.draft.isFragile = value),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: widget.draft.paymentMethod,
-              decoration: const InputDecoration(labelText: 'Payment method'),
-              style: AppTypography.bodyMd,
-              items: const [
-                DropdownMenuItem(value: 'cash', child: Text('Cash')),
-                DropdownMenuItem(value: 'wallet', child: Text('Wallet')),
-              ],
-              onChanged: (value) => setState(() {
-                if (value != null) widget.draft.paymentMethod = value;
-              }),
-            ),
+DropdownButtonFormField<String>(
+  initialValue: widget.draft.paymentMethod ?? 'none',
+  decoration: const InputDecoration(labelText: 'Payment method'),
+  style: AppTypography.bodyMd,
+  items: const [
+    DropdownMenuItem(value: 'cash', child: Text('Cash')),
+    DropdownMenuItem(value: 'wallet', child: Text('Wallet')),
+    DropdownMenuItem(value: 'none', child: Text('No default')),
+  ],
+  onChanged: (value) => setState(() {
+    widget.draft.paymentMethod = value == 'none' ? null : (value ?? 'cash');
+  }),
+),
             DropdownButtonFormField<String>(
               initialValue: widget.draft.farePaidBy,
               decoration: const InputDecoration(labelText: 'Fare paid by'),

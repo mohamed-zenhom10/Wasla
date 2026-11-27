@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:main/components/app_page_header.dart';
+import 'package:main/components/main_button.dart';
 import 'package:main/services/shipment_service.dart';
 import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
@@ -31,7 +32,6 @@ class _AddMoneyPageState extends State<AddMoneyPage> {
   Uint8List? _receiptBytes;
   String? _receiptContentType;
   bool _isSubmitting = false;
-  String? _successMessage;
 
   @override
   void initState() {
@@ -116,7 +116,6 @@ class _AddMoneyPageState extends State<AddMoneyPage> {
     setState(() {
       _isSubmitting = true;
       _error = null;
-      _successMessage = null;
     });
     try {
       final topup = await _service.createTopup(
@@ -126,13 +125,18 @@ class _AddMoneyPageState extends State<AddMoneyPage> {
         contentType: _receiptContentType!,
       );
       if (!mounted) return;
-      setState(() {
-        _successMessage = 'Top-up request submitted. Status: ${topup.status}.';
-        _receiptBytes = null;
-      });
+      setState(() => _receiptBytes = null);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Top-up request submitted. Status: ${topup.status}.')),
+      );
       widget.onSubmitted?.call();
     } catch (error) {
       if (mounted) setState(() => _error = WalletService.readableError(error));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(WalletService.readableError(error))),
+      );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -142,6 +146,12 @@ class _AddMoneyPageState extends State<AddMoneyPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
+      appBar: AppBar(
+        backgroundColor: AppColors.white,
+        foregroundColor: AppColors.darkGreen,
+        elevation: 0,
+        leading: BackButton(),
+      ),
       body: SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
@@ -153,10 +163,6 @@ class _AddMoneyPageState extends State<AddMoneyPage> {
           else ...[
             if (_error != null) ...[
               Text(_error!, style: const TextStyle(color: AppColors.accent)),
-              const SizedBox(height: 12),
-            ],
-            if (_successMessage != null) ...[
-              Text(_successMessage!, style: const TextStyle(color: AppColors.darkGreen)),
               const SizedBox(height: 12),
             ],
             Text('InstaPay handle: ${_instapayHandle ?? 'Not available'}', style: AppTypography.bodyMd),
@@ -197,9 +203,10 @@ class _AddMoneyPageState extends State<AddMoneyPage> {
               ],
             ),
             const SizedBox(height: 16),
-              ElevatedButton(
+              MainButton(
+                text: _isSubmitting ? 'Submitting...' : 'Submit top-up',
                 onPressed: _isSubmitting ? null : _submit,
-                child: Text(_isSubmitting ? 'Submitting...' : 'Submit top-up'),
+                isLoading: _isSubmitting,
               ),
           ],
         ],

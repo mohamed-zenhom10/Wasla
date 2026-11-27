@@ -28,11 +28,17 @@ class WalletService {
           return 'An approved payout account is required before withdrawing.';
         case 'WITHDRAWAL_PENDING':
           return 'You already have a pending withdrawal request.';
-        case 'ALREADY_REVIEWED':
-          return 'This withdrawal request has already been reviewed.';
-        case 'NOT_FOUND':
-          return 'The requested item was not found.';
-      }
+case 'ALREADY_REVIEWED':
+return 'This withdrawal request has already been reviewed.';
+case 'NOT_FOUND':
+return 'The requested item was not found.';
+case 'WALLET_NEGATIVE':
+return 'Your wallet balance is negative. Top up your wallet before requesting a shipment.';
+case 'WALLET_TOO_LOW':
+return 'The wallet balance is too low for this shipment. Top up your wallet or choose cash for the recipient to pay.';
+case 'CANCEL_FEE':
+return 'A cancellation fee applies.';
+}
       if (error.message.trim().isNotEmpty) return error.message;
     }
     return error.toString();

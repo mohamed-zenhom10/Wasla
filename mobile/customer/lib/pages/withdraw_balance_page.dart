@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/app_page_header.dart';
+import 'package:main/components/main_button.dart';
 import 'package:main/models/wallet.dart';
 import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
@@ -78,9 +79,17 @@ class _WithdrawBalancePageState extends State<WithdrawBalancePage> {
     try {
       await _service.createWithdrawal(amount: amount.toStringAsFixed(2));
       if (!mounted) return;
+      setState(() => _error = null);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Withdrawal requested.')),
+      );
       await _load();
     } catch (error) {
       if (mounted) setState(() => _error = WalletService.readableError(error));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(WalletService.readableError(error))),
+      );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -91,16 +100,30 @@ class _WithdrawBalancePageState extends State<WithdrawBalancePage> {
       await _service.cancelWithdrawal(id);
       if (!mounted) return;
       await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Withdrawal cancelled.')),
+      );
     } catch (error) {
       if (mounted) setState(() => _error = WalletService.readableError(error));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(WalletService.readableError(error))),
+      );
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.white,
-      body: SafeArea(
+@override
+Widget build(BuildContext context) {
+return Scaffold(
+backgroundColor: AppColors.white,
+appBar: AppBar(
+backgroundColor: AppColors.white,
+foregroundColor: AppColors.darkGreen,
+elevation: 0,
+leading: BackButton(),
+),
+body: SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
         children: [
@@ -124,10 +147,11 @@ class _WithdrawBalancePageState extends State<WithdrawBalancePage> {
               decoration: const InputDecoration(labelText: 'Amount'),
             ),
             const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: _isSubmitting ? null : _submit,
-              child: Text(_isSubmitting ? 'Submitting...' : 'Request withdrawal'),
-            ),
+    MainButton(
+      text: _isSubmitting ? 'Submitting...' : 'Request withdrawal',
+      onPressed: _isSubmitting ? null : _submit,
+      isLoading: _isSubmitting,
+    ),
             const SizedBox(height: 24),
             Text('Withdrawal history', style: AppTypography.headingSm),
             const SizedBox(height: 8),

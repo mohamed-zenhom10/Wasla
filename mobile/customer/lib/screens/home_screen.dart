@@ -142,7 +142,7 @@ class HomeScreenState extends State<HomeScreen> {
       ..dropoffLongitude = _destinationPoint?.longitude
       ..useAiEstimate = useAiEstimate
       ..catalog = _catalog
-      ..paymentMethod = _wallet?.defaultPaymentMethod ?? 'cash';
+      ..paymentMethod = _wallet?.defaultPaymentMethod;
     if (draft.paymentMethod == 'wallet') {
       final balance = double.tryParse(_wallet?.balance ?? '0') ?? 0;
       if (balance < 0) {

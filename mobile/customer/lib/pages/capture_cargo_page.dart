@@ -107,13 +107,12 @@ field: 'photos',
 );
 return;
 }
-if (widget.draft.paymentMethod == 'wallet' &&
-    !await _walletService.hasUsableBalance()) {
-_showError(
-'Your wallet balance is negative. Top up your wallet before requesting a shipment.',
-field: 'paymentMethod',
-);
-return;
+if (!await _walletService.hasUsableBalance()) {
+  _showError(
+    'Your wallet balance is negative. Top up your wallet before requesting a shipment.',
+    field: 'paymentMethod',
+  );
+  return;
 }
 setState(() {
       _isSubmitting = true;
@@ -211,10 +210,15 @@ if (!mounted) return;
           : VehiclesSmallPage(draft: widget.draft);
       Navigator.of(context)
           .push(MaterialPageRoute<void>(builder: (_) => nextPage));
-    } on ShipmentApiException catch (error) {
-      widget.draft.fieldErrors[error.field ?? 'shipment'] = error.message;
-      _showError(error.message, field: error.field);
-    } catch (error) {
+} on ShipmentApiException catch (error) {
+final message = error.code == 'WALLET_NEGATIVE'
+    ? 'Your wallet balance is negative. Top up your wallet before requesting a shipment.'
+    : error.code == 'WALLET_TOO_LOW'
+        ? 'The wallet balance is too low for this shipment. Top up your wallet or choose cash for the recipient to pay.'
+        : error.message;
+widget.draft.fieldErrors[error.field ?? 'shipment'] = message;
+_showError(message, field: error.field);
+} catch (error) {
       _showError('The shipment could not be saved. $error');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

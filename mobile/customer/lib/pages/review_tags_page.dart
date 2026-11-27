@@ -54,6 +54,12 @@ class _ReviewTagsPageState extends State<ReviewTagsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
+      appBar: AppBar(
+        backgroundColor: AppColors.white,
+        foregroundColor: AppColors.darkGreen,
+        elevation: 0,
+        leading: BackButton(),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),

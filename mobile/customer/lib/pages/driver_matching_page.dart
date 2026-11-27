@@ -181,11 +181,15 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
         reason: 'Changed my mind',
         acceptFee: acceptFee,
       );
-      if (!mounted) return;
-      await _startNewBookingFrom(shipment);
-    } on ShipmentApiException catch (error) {
-      if (!mounted) return;
-      if (error.code == 'CANCEL_FEE') {
+if (!mounted) return;
+await _startNewBookingFrom(shipment);
+if (!mounted) return;
+ScaffoldMessenger.of(context).showSnackBar(
+const SnackBar(content: Text('Shipment cancelled successfully.')),
+);
+} on ShipmentApiException catch (error) {
+if (!mounted) return;
+if (error.code == 'CANCEL_FEE') {
         final fee = error.details?['fee']?.toString();
         final accepted = await showDialog<bool>(
           context: context,
@@ -208,16 +212,21 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
             ],
           ),
         );
-        if (accepted == true && mounted) {
-          await _cancelShipment(shipment, acceptFee: true);
-        }
-        return;
-      }
-      setState(() => _errorMessage = error.message);
-    } finally {
-      if (mounted) setState(() => _isCancelling = false);
-    }
-  }
+if (accepted == true && mounted) {
+await _cancelShipment(shipment, acceptFee: true);
+return;
+}
+return;
+}
+setState(() => _errorMessage = error.message);
+if (!mounted) return;
+ScaffoldMessenger.of(context).showSnackBar(
+SnackBar(content: Text(error.message)),
+);
+} finally {
+if (mounted) setState(() => _isCancelling = false);
+}
+}
 
   Future<void> _startNewBookingFrom(Shipment shipment) async {
     final service = ShipmentService();

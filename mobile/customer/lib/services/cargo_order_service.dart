@@ -38,7 +38,7 @@ class CargoOrderDraft {
   String pickupType = 'now';
   String? requestedVehicleTypeId;
   DateTime? scheduledAt;
-  String paymentMethod = 'cash';
+  String? paymentMethod = 'cash';
   String farePaidBy = 'sender';
   String recipientName = '';
   String recipientPhone = '';

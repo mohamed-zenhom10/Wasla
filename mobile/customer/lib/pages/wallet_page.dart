@@ -6,6 +6,7 @@ import 'package:main/pages/payment_methods_page.dart';
 import 'package:main/pages/wallet_transactions_page.dart';
 import 'package:main/pages/payout_account_page.dart';
 import 'package:main/pages/top_up_history_page.dart';
+import 'package:main/pages/wallet_withdrawals_page.dart';
 import 'package:main/pages/withdraw_balance_page.dart';
 import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
@@ -48,8 +49,10 @@ class _WalletPageState extends State<WalletPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: ListView(
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: SafeArea(
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
         children: [
           const AppPageHeader(title: 'Wallet'),
@@ -140,7 +143,7 @@ class _WalletPageState extends State<WalletPage> {
             OutlinedButton(
               onPressed: () async {
                 await Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const WithdrawBalancePage()),
+                  MaterialPageRoute<void>(builder: (_) => const WalletWithdrawalsPage()),
                 );
                 if (mounted) _load();
               },
@@ -176,6 +179,7 @@ class _WalletPageState extends State<WalletPage> {
             ],
           ],
         ],
+      ),
       ),
     );
   }

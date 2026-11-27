@@ -74,6 +74,17 @@ void main() {
     var accepted = false;
     AuthService.replaceHttpClientForTesting(
       MockClient((request) async {
+        if (request.url.path == '/api/me/wallet') {
+          return _response({
+            'wallet': {
+              'balance': '120.00',
+              'available': '120.00',
+              'pendingTopups': {'count': 0, 'amount': '0.00'},
+              'pendingWithdrawal': null,
+              'defaultPaymentMethod': 'cash',
+            },
+          });
+        }
         if (request.url.path == '/api/shipments/12/quotes/30/accept') {
           accepted = true;
           return _response({

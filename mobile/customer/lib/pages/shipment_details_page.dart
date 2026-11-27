@@ -59,13 +59,12 @@ Shipment? _shipment;
 Future<void> _requestShipment() async {
 final shipment = _shipment;
 if (shipment == null || _isLoading) return;
-if (shipment.paymentMethod == 'wallet' &&
-    !await _walletService.hasUsableBalance()) {
-setState(() {
-_errorMessage =
-'Your wallet balance is negative. Top up your wallet before requesting this shipment.';
-});
-return;
+if (!await _walletService.hasUsableBalance()) {
+  setState(() {
+    _errorMessage =
+        'Your wallet balance is negative. Top up your wallet before requesting this shipment.';
+  });
+  return;
 }
 setState(() {
 _isLoading = true;
@@ -85,12 +84,17 @@ setState(() => _shipment = updated);
           builder: (_) => DriverMatchingPage(shipmentId: updated.id),
         ),
       );
-    } on ShipmentApiException catch (error) {
-      if (mounted) setState(() => _errorMessage = error.message);
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
+} on ShipmentApiException catch (error) {
+final message = error.code == 'WALLET_NEGATIVE'
+    ? 'Your wallet balance is negative. Top up your wallet before requesting this shipment.'
+    : error.code == 'WALLET_TOO_LOW'
+        ? 'The wallet balance is too low for this shipment. Top up your wallet or choose cash for the recipient to pay.'
+        : error.message;
+if (mounted) setState(() => _errorMessage = message);
+} finally {
+if (mounted) setState(() => _isLoading = false);
+}
+}
 
   Future<void> _openReviewTags() async {
 Navigator.of(context).push(

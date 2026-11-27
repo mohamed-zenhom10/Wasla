@@ -70,12 +70,11 @@ if (selected == null) {
 _showError('Select an available quote.');
 return;
 }
-if (widget.draft.paymentMethod == 'wallet' &&
-    !await _walletService.hasUsableBalance()) {
-_showError(
-'Your wallet balance is negative. Top up your wallet before accepting this quote.',
-);
-return;
+if (!await _walletService.hasUsableBalance()) {
+  _showError(
+    'Your wallet balance is negative. Top up your wallet before accepting this quote.',
+  );
+  return;
 }
 setState(() {
 _isLoading = true;
@@ -107,15 +106,22 @@ Navigator.of(context).push(
           ),
         ),
       );
-    } on ShipmentApiException catch (error) {
-      if (error.code == 'QUOTE_EXPIRED' ||
-          error.code == 'QUOTE_OUTDATED' ||
-          error.code == 'QUOTE_NOT_AVAILABLE') {
-        widget.draft.selectedQuote = null;
-        _selectedQuoteId = null;
-      }
-      _showError(error.message, code: error.code);
-    } finally {
+} on ShipmentApiException catch (error) {
+if (error.code == 'QUOTE_EXPIRED' ||
+    error.code == 'QUOTE_OUTDATED' ||
+    error.code == 'QUOTE_NOT_AVAILABLE') {
+  widget.draft.selectedQuote = null;
+  _selectedQuoteId = null;
+}
+_showError(
+error.code == 'WALLET_NEGATIVE'
+    ? 'Your wallet balance is negative. Top up your wallet before requesting a shipment.'
+    : error.code == 'WALLET_TOO_LOW'
+        ? 'The wallet balance is too low for this shipment. Top up your wallet or choose cash for the recipient to pay.'
+        : error.message,
+code: error.code,
+);
+} finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }

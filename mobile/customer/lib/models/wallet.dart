@@ -7,8 +7,14 @@ class WalletPendingTopups {
   factory WalletPendingTopups.fromJson(Map<String, dynamic> json) =>
       WalletPendingTopups(
         count: (json['count'] as num?)?.toInt() ?? 0,
-        amount: json['amount']?.toString() ?? '0.00',
+        amount: _money(json['amount']),
       );
+}
+
+String _money(Object? value) {
+  final parsed = value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '');
+  if (parsed == null) return '0.00';
+  return parsed.toStringAsFixed(2);
 }
 
 class WalletPendingWithdrawal {
@@ -17,15 +23,13 @@ class WalletPendingWithdrawal {
   final String amount;
 
   factory WalletPendingWithdrawal.fromJson(dynamic json) {
-    if (json is Map<String, dynamic>) {
-      return WalletPendingWithdrawal(amount: json['amount']?.toString() ?? '0.00');
-    }
     if (json is Map) {
       return WalletPendingWithdrawal(
         amount: Map<String, dynamic>.from(json)['amount']?.toString() ?? '0.00',
       );
     }
-    return const WalletPendingWithdrawal(amount: '0.00');
+    final parsed = json is num ? json.toDouble() : double.tryParse(json?.toString() ?? '');
+    return WalletPendingWithdrawal(amount: (parsed ?? 0).toStringAsFixed(2));
   }
 }
 
@@ -49,8 +53,8 @@ class Wallet {
   factory Wallet.fromJson(Map<String, dynamic> json) {
     final pendingWithdrawalJson = json['pendingWithdrawal'];
     return Wallet(
-      balance: json['balance']?.toString() ?? '0.00',
-      available: json['available']?.toString() ?? json['balance']?.toString() ?? '0.00',
+      balance: _money(json['balance']),
+      available: _money(json['available'] ?? json['balance']),
       pendingTopups: json['pendingTopups'] is Map
           ? WalletPendingTopups.fromJson(
               Map<String, dynamic>.from(json['pendingTopups'] as Map),
@@ -87,14 +91,16 @@ class WalletTransaction {
   final String? note;
   final DateTime? createdAt;
 
-  bool get isPositive => (double.tryParse(amount) ?? 0) >= 0;
+  bool get isIncoming => (double.tryParse(amount) ?? 0) > 0;
+
+  bool get isOutgoing => (double.tryParse(amount) ?? 0) < 0;
 
   factory WalletTransaction.fromJson(Map<String, dynamic> json) =>
       WalletTransaction(
         id: json['id']?.toString() ?? '',
         type: json['type']?.toString() ?? '',
-        amount: json['amount']?.toString() ?? '0.00',
-        balanceAfter: json['balanceAfter']?.toString(),
+        amount: _money(json['amount']),
+        balanceAfter: json['balanceAfter'] == null ? null : _money(json['balanceAfter']),
         shipmentId: json['shipmentId']?.toString(),
         topupId: json['topupId']?.toString(),
         withdrawalId: json['withdrawalId']?.toString(),
@@ -187,7 +193,7 @@ class WalletTopup {
 
   factory WalletTopup.fromJson(Map<String, dynamic> json) => WalletTopup(
         id: json['id']?.toString() ?? '',
-        amount: json['amount']?.toString() ?? '0.00',
+        amount: _money(json['amount']),
         status: json['status']?.toString() ?? '',
         reference: json['reference']?.toString(),
         rejectionReason: json['rejectionReason']?.toString(),
@@ -246,7 +252,7 @@ class WalletWithdrawal {
   factory WalletWithdrawal.fromJson(Map<String, dynamic> json) =>
       WalletWithdrawal(
         id: json['id']?.toString() ?? '',
-        amount: json['amount']?.toString() ?? '0.00',
+        amount: _money(json['amount']),
         status: json['status']?.toString() ?? '',
         reference: json['reference']?.toString(),
         rejectionReason: json['rejectionReason']?.toString(),

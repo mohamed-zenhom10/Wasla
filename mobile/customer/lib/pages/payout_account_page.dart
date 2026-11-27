@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/app_page_header.dart';
+import 'package:main/components/second_button.dart';
+import 'package:main/components/main_button.dart';
 import 'package:main/models/wallet.dart';
 import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
@@ -16,7 +18,9 @@ class _PayoutAccountPageState extends State<PayoutAccountPage> {
   final _holderNameController = TextEditingController();
   final _bankNameController = TextEditingController();
   final _accountNumberController = TextEditingController();
-  final TextEditingController _methodController = TextEditingController(text: 'bank_account');
+  final TextEditingController _methodController = TextEditingController(
+    text: 'bank_account',
+  );
 
   WalletPayoutAccount? _account;
   bool _isLoading = true;
@@ -104,6 +108,12 @@ class _PayoutAccountPageState extends State<PayoutAccountPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.white,
+      appBar: AppBar(
+        backgroundColor: AppColors.white,
+        foregroundColor: AppColors.darkGreen,
+        elevation: 0,
+        leading: BackButton(),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
@@ -121,7 +131,10 @@ class _PayoutAccountPageState extends State<PayoutAccountPage> {
                 const Text('No payout account is saved yet.'),
                 const SizedBox(height: 12),
               ] else ...[
-                Text('Method: ${_account!.method}', style: AppTypography.bodyMd),
+                Text(
+                  'Method: ${_account!.method}',
+                  style: AppTypography.bodyMd,
+                ),
                 Text(
                   'Holder: ${_account!.holderName}',
                   style: AppTypography.bodyMd,
@@ -134,9 +147,13 @@ class _PayoutAccountPageState extends State<PayoutAccountPage> {
                   'Account: ${_account!.accountLast4}',
                   style: AppTypography.bodyMd,
                 ),
-                if (_account!.status != null && _account!.status!.isNotEmpty) ...[
+                if (_account!.status != null &&
+                    _account!.status!.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  Text('Status: ${_account!.status}', style: AppTypography.bodySm),
+                  Text(
+                    'Status: ${_account!.status}',
+                    style: AppTypography.bodySm,
+                  ),
                 ],
               ],
               const SizedBox(height: 16),
@@ -165,14 +182,16 @@ class _PayoutAccountPageState extends State<PayoutAccountPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                ElevatedButton(
+                MainButton(
+                  text: _isSaving ? 'Saving...' : 'Save payout account',
                   onPressed: _isSaving ? null : _submit,
-                  child: Text(_isSaving ? 'Saving...' : 'Save payout account'),
+                  isLoading: _isSaving,
                 ),
               ],
-              ElevatedButton(
+              SizedBox(height: 12),
+              WaslaButtonTwo(
+                text: 'Add payout account',
                 onPressed: () => setState(() => _isFormOpen = true),
-                child: const Text('Add payout account'),
               ),
               const SizedBox(height: 12),
               Text(

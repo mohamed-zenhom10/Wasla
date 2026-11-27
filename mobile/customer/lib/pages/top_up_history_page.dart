@@ -53,43 +53,52 @@ class _WalletTopUpsPageState extends State<WalletTopUpsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-            child: const AppPageHeader(title: 'Top-up history'),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              children: [
-                if (_error != null)
-                  Text(_error!, style: const TextStyle(color: AppColors.accent)),
-                if (_items.isEmpty && !_isLoading)
-                  const Text('No top-up requests found.'),
-                for (final item in _items) ...[
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('${item.amount} EGP'),
-                    subtitle: Text(item.status),
-                    trailing: item.status == 'rejected'
-                        ? Text(item.rejectionReason ?? '')
-                        : null,
-                  ),
-                  const Divider(height: 1),
-                ],
-                if (_isLoading) const Center(child: CircularProgressIndicator()),
-                if (_hasMore && !_isLoading)
-                  TextButton(
-                    onPressed: () => _load(),
-                    child: const Text('Load more'),
-                  ),
-              ],
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      appBar: AppBar(
+        backgroundColor: AppColors.white,
+        foregroundColor: AppColors.darkGreen,
+        elevation: 0,
+        leading: BackButton(),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+              child: const AppPageHeader(title: 'Top-up history'),
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                children: [
+                  if (_error != null)
+                    Text(_error!, style: const TextStyle(color: AppColors.accent)),
+                  if (_items.isEmpty && !_isLoading)
+                    const Text('No top-up requests found.'),
+                  for (final item in _items) ...[
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('${item.amount} EGP'),
+                      subtitle: Text(item.status),
+                      trailing: item.status == 'rejected'
+                          ? Text(item.rejectionReason ?? '')
+                          : null,
+                    ),
+                    const Divider(height: 1),
+                  ],
+                  if (_isLoading) const Center(child: CircularProgressIndicator()),
+                  if (_hasMore && !_isLoading)
+                    TextButton(
+                      onPressed: () => _load(),
+                      child: const Text('Load more'),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

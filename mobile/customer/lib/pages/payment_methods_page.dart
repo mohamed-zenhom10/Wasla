@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/app_page_header.dart';
+import 'package:main/components/main_button.dart';
 import 'package:main/models/wallet.dart';
 import 'package:main/services/wallet_service.dart';
 import 'package:main/theme/app_theme.dart';
@@ -45,21 +46,29 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
     }
   }
 
-  Future<void> _select(String? method) async {
+  Future<void> _save() async {
     setState(() {
       _isSaving = true;
       _error = null;
     });
     try {
-      final wallet = await _service.setPaymentMethod(method);
+      final wallet = await _service.setPaymentMethod(_selectedMethod);
       if (!mounted) return;
       setState(() {
         _wallet = wallet;
         _selectedMethod = wallet.defaultPaymentMethod;
       });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment method saved.')),
+      );
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = WalletService.readableError(error));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(WalletService.readableError(error))),
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -70,45 +79,57 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
     return Material(
       color: AppColors.white,
       child: SafeArea(
-      child: ListView(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-        children: [
-          const AppPageHeader(title: 'Payment Methods'),
-          const SizedBox(height: 18),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator())
-          else ...[
-            if (_error != null) ...[
-              Text(_error!, style: const TextStyle(color: AppColors.accent)),
-              const SizedBox(height: 12),
-            ],
-            _NegativeBalanceWarning(wallet: _wallet),
-            const SizedBox(height: 12),
-            const SizedBox(height: 10),
-            _PaymentMethodCard(
-              title: 'Cash',
-              subtitle: 'Pay the driver directly',
-              selected: _selectedMethod == 'cash',
-              enabled: !_isSaving,
-              onTap: () => _select('cash'),
+        child: ListView(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(8, 4, 8, 8),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: BackButton(),
+              ),
             ),
-            const SizedBox(height: 10),
-            _PaymentMethodCard(
-              title: 'No default',
-              subtitle: 'Choose a method for each shipment',
-              selected: _selectedMethod == null,
-              enabled: !_isSaving,
-              onTap: () => _select(null),
+            const AppPageHeader(title: 'Payment Methods'),
+            const SizedBox(height: 18),
+            if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else ...[
+              if (_error != null) ...[
+                Text(_error!, style: const TextStyle(color: AppColors.accent)),
+                const SizedBox(height: 12),
+              ],
+              _NegativeBalanceWarning(wallet: _wallet),
+              const SizedBox(height: 12),
+              const SizedBox(height: 10),
+              _PaymentMethodCard(
+                title: 'Cash',
+                subtitle: 'Pay the driver directly',
+                selected: _selectedMethod == 'cash',
+                enabled: !_isSaving,
+                onTap: () => setState(() => _selectedMethod = 'cash'),
+              ),
+              const SizedBox(height: 10),
+              _PaymentMethodCard(
+                title: 'No default',
+                subtitle: 'Choose a method for each shipment',
+                selected: _selectedMethod == null,
+                enabled: !_isSaving,
+                onTap: () => setState(() => _selectedMethod = null),
+              ),
+            ],
+            const SizedBox(height: 16),
+            MainButton(
+              text: _isSaving ? 'Saving...' : 'Save payment method',
+              onPressed: _isSaving ? null : _save,
+              isLoading: _isSaving,
             ),
           ],
-        ],
+        ),
       ),
-    ),
-  );
-}
-
+    );
+  }
 }
 
 class _NegativeBalanceWarning extends StatelessWidget {

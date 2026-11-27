@@ -95,13 +95,21 @@ class _WalletTransactionsPageState extends State<WalletTransactionsPage> {
   @override
   Widget build(BuildContext context) {
     final visible = _items.where(_matchesTab).toList();
-    return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-            child: AppPageHeader(title: 'Transactions'),
-          ),
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      appBar: AppBar(
+        backgroundColor: AppColors.white,
+        foregroundColor: AppColors.darkGreen,
+        elevation: 0,
+        leading: BackButton(),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+              child: AppPageHeader(title: 'Transactions'),
+            ),
           SizedBox(
             height: 42,
             child: ListView.separated(
@@ -138,7 +146,7 @@ class _WalletTransactionsPageState extends State<WalletTransactionsPage> {
                     trailing: Text(
                       item.amount,
                       style: TextStyle(
-                        color: item.isPositive ? Colors.green : AppColors.accent,
+                        color: item.isIncoming ? Colors.green : AppColors.accent,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -155,6 +163,7 @@ class _WalletTransactionsPageState extends State<WalletTransactionsPage> {
             ),
           ),
         ],
+        ),
       ),
     );
   }

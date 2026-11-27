@@ -83,10 +83,10 @@ class ShipmentService {
     String? requestedVehicleTypeId,
     required ShipmentLocation pickup,
     required ShipmentLocation dropoff,
-    required String pickupType,
-    DateTime? pickupAt,
-    required String paymentMethod,
-    String farePaidBy = 'sender',
+  required String pickupType,
+  DateTime? pickupAt,
+  required String? paymentMethod,
+  String farePaidBy = 'sender',
     String? recipientName,
     String? recipientPhone,
     DateTime? now,
@@ -422,14 +422,14 @@ class ShipmentService {
     required int helpersCount,
     required ShipmentLocation pickup,
     required ShipmentLocation dropoff,
-    required String pickupType,
-    required DateTime? pickupAt,
-    required String paymentMethod,
-    required String farePaidBy,
-    required String? recipientName,
-    required String? recipientPhone,
-    required DateTime now,
-  }) {
+  required String pickupType,
+  DateTime? pickupAt,
+  required String? paymentMethod,
+  required String farePaidBy,
+  required String? recipientName,
+  required String? recipientPhone,
+  required DateTime now,
+}) {
     const categories = {
       'cargoCategoryId': 'Select a cargo category.',
       'cargoDescription': 'Describe the cargo.',
@@ -486,12 +486,12 @@ class ShipmentService {
         );
       }
     }
-    if (paymentMethod != 'cash' && paymentMethod != 'wallet') {
-      _invalid('paymentMethod', categories['paymentMethod']!);
-    }
-    if (farePaidBy != 'sender' && farePaidBy != 'recipient') {
-      _invalid('farePaidBy', 'Choose who pays the fare.');
-    }
+if (paymentMethod != 'cash' && paymentMethod != 'wallet') {
+_invalid('paymentMethod', categories['paymentMethod']!);
+}
+if (farePaidBy != 'sender' && farePaidBy != 'recipient') {
+_invalid('farePaidBy', 'Choose who pays the fare.');
+}
     if (farePaidBy == 'recipient') {
       if (paymentMethod != 'cash') {
         _invalid('paymentMethod', 'Recipient-paid fares must use cash.');
