@@ -6,6 +6,14 @@ import 'package:main/pages/shipment_details_page.dart';
 import 'package:main/services/shipment_service.dart';
 import 'package:main/theme/app_theme.dart';
 
+class TripsRefreshObserver extends NavigatorObserver {
+  static Future<void> Function({required bool reset})? onDidPopNext;
+
+  void didPopNext(Route<dynamic> nextRoute) {
+    onDidPopNext?.call(reset: true);
+  }
+}
+
 class YourActivityPage extends StatefulWidget {
   const YourActivityPage({super.key, this.isPreview = false, this.onDone});
 
@@ -39,7 +47,14 @@ class _YourActivityPageState extends State<YourActivityPage> {
   @override
   void initState() {
     super.initState();
+    TripsRefreshObserver.onDidPopNext = _load;
     if (!widget.isPreview) _load(reset: true);
+  }
+
+  @override
+  void dispose() {
+    TripsRefreshObserver.onDidPopNext = null;
+    super.dispose();
   }
 
   Future<void> _load({required bool reset}) async {

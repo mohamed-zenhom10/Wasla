@@ -8,6 +8,7 @@ import 'package:main/pages/cargo_category_page.dart';
 import 'package:main/pages/location_picker_page.dart';
 import 'package:main/pages/messages_page.dart';
 import 'package:main/pages/profile_page.dart';
+import 'package:main/pages/vehicle_small_page.dart';
 import 'package:main/pages/your_activity_page.dart';
 import 'package:main/pages/wallet_page.dart';
 import 'package:main/models/wallet.dart';
@@ -38,11 +39,11 @@ class HomeScreenState extends State<HomeScreen> {
   String? _customerName;
   LatLng? _pickupPoint;
   LatLng? _destinationPoint;
-  CargoOrderDraft? _activeBookingDraft;
+  List<CargoOrderDraft> _activeBookingDrafts = <CargoOrderDraft>[];
   final Set<String> _submittedShipmentIds = <String>{};
 
   void clearActiveBookingDraft() {
-    _activeBookingDraft = null;
+    _activeBookingDrafts.clear();
   }
 
   void resetLocationSelection() {
@@ -55,9 +56,9 @@ class HomeScreenState extends State<HomeScreen> {
 
   void markShipmentSubmitted(String shipmentId) {
     _submittedShipmentIds.add(shipmentId);
-    if (_activeBookingDraft?.shipment?.id == shipmentId) {
-      _activeBookingDraft = null;
-    }
+    _activeBookingDrafts.removeWhere(
+      (draft) => draft.shipment?.id == shipmentId,
+    );
   }
 
   @override
@@ -154,23 +155,42 @@ class HomeScreenState extends State<HomeScreen> {
         return;
       }
     }
-    setState(() => _activeBookingDraft = draft);
+    setState(() => _activeBookingDrafts = [draft]);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
+    );
+  }
+
+  void _resumeDraft(CargoOrderDraft draft) {
+    final shipment = draft.shipment;
+    if (shipment != null && _submittedShipmentIds.contains(shipment.id)) {
+      return;
+    }
+    if (shipment != null &&
+        (shipment.status == 'searching_driver' ||
+            shipment.status == 'driver_assigned' ||
+            shipment.status == 'in_progress')) {
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => VehiclesSmallPage(draft: draft),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
     );
   }
 
   void _resumeOrder() {
-    final draft = _activeBookingDraft;
-    if (draft == null) return;
-    if (draft.shipment != null &&
-        _submittedShipmentIds.contains(draft.shipment!.id)) {
-      _activeBookingDraft = null;
+    for (final draft in _activeBookingDrafts) {
+      final shipment = draft.shipment;
+      if (shipment != null && _submittedShipmentIds.contains(shipment.id)) {
+        continue;
+      }
+      _resumeDraft(draft);
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
-    );
   }
 
   void _handleTripsTap() {
@@ -276,14 +296,101 @@ class HomeScreenState extends State<HomeScreen> {
                 onPressed: _requestMove,
                 borderRadius: 8,
               ),
-              if (_activeBookingDraft != null) ...[
-                const SizedBox(height: 8),
-                MainButton(
-                  text: 'Resume move',
-                  onPressed: _resumeOrder,
-                  variant: WaslaButtonVariant.secondary,
-                  borderRadius: 8,
-                ),
+              if (_activeBookingDrafts.isNotEmpty) ...[
+                for (final draft in _activeBookingDrafts) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.light,
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      boxShadow: [AppShadows.card],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                draft.category,
+                                style: AppTypography.bodyMd.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.darkGreen,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.white,
+                                borderRadius: BorderRadius.circular(AppRadius.full),
+                                border: Border.all(color: AppColors.borderLight),
+                              ),
+                              child: Text(
+                                draft.shipment?.status ?? 'draft',
+                                style: AppTypography.labelSm.copyWith(
+                                  color: AppColors.darkGreen,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Shipment #${draft.shipment?.id ?? '—'}',
+                          style: AppTypography.labelSm.copyWith(
+                            color: AppColors.gray,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.white,
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            border: Border.all(color: AppColors.borderLight),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _ResumeRouteLocation(
+                                icon: Icons.location_on_outlined,
+                                label: 'From',
+                                address: draft.pickupAddress,
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child: Icon(
+                                  Icons.arrow_forward,
+                                  size: 14,
+                                  color: AppColors.accent,
+                                ),
+                              ),
+                              _ResumeRouteLocation(
+                                icon: Icons.location_on_outlined,
+                                label: 'To',
+                                address: draft.dropoffAddress,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        WaslaButton(
+                          text: 'Resume move',
+                          onPressed: _resumeOrder,
+                          variant: WaslaButtonVariant.secondary,
+                          borderRadius: AppRadius.md,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
               const SizedBox(height: 14),
               Container(
@@ -363,25 +470,50 @@ class HomeScreenState extends State<HomeScreen> {
             }
             setTab(index);
           },
-          items: const [
+          items: [
             BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined),
+              icon: _BottomNavIcon(
+                assetPath: 'assets/bottombar/home.png',
+                selected: _selectedTab == 0,
+                activeColor: AppColors.accent,
+                inactiveColor: AppColors.darkGreen,
+              ),
               label: 'Home',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.alt_route),
+              icon: _BottomNavIcon(
+                assetPath: 'assets/bottombar/route.png',
+                selected: _selectedTab == 1,
+                activeColor: AppColors.accent,
+                inactiveColor: AppColors.darkGreen,
+              ),
               label: 'Trips',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline),
+              icon: _BottomNavIcon(
+                assetPath: 'assets/bottombar/message-circle.png',
+                selected: _selectedTab == 2,
+                activeColor: AppColors.accent,
+                inactiveColor: AppColors.darkGreen,
+              ),
               label: 'Messages',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.account_balance_wallet_outlined),
+              icon: _BottomNavIcon(
+                assetPath: 'assets/bottombar/wallet.png',
+                selected: _selectedTab == 3,
+                activeColor: AppColors.accent,
+                inactiveColor: AppColors.darkGreen,
+              ),
               label: 'Wallet',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline),
+              icon: _BottomNavIcon(
+                assetPath: 'assets/bottombar/user-round.png',
+                selected: _selectedTab == 4,
+                activeColor: AppColors.accent,
+                inactiveColor: AppColors.darkGreen,
+              ),
               label: 'Profile',
             ),
           ],
@@ -426,6 +558,75 @@ class _LocationInput extends StatelessWidget {
           ),
         ),
         const Icon(Icons.chevron_right, size: 18, color: AppColors.darkGreen),
+      ],
+    );
+  }
+}
+
+class _BottomNavIcon extends StatelessWidget {
+  const _BottomNavIcon({
+    required this.assetPath,
+    required this.selected,
+    required this.activeColor,
+    required this.inactiveColor,
+  });
+
+  final String assetPath;
+  final bool selected;
+  final Color activeColor;
+  final Color inactiveColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      assetPath,
+      width: 24,
+      height: 24,
+      color: selected ? activeColor : inactiveColor,
+      colorBlendMode: BlendMode.srcIn,
+    );
+  }
+}
+
+class _ResumeRouteLocation extends StatelessWidget {
+  const _ResumeRouteLocation({
+    required this.icon,
+    required this.label,
+    required this.address,
+  });
+
+  final IconData icon;
+  final String label;
+  final String address;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.accent),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: AppTypography.labelSm.copyWith(
+                  color: AppColors.gray,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                address,
+                style: AppTypography.bodySm.copyWith(
+                  color: AppColors.darkGreen,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

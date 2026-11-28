@@ -97,8 +97,16 @@ class _PayoutAccountPageState extends State<PayoutAccountPage> {
         _isFormOpen = false;
         _error = null;
       });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payout account saved.')),
+      );
     } catch (error) {
       if (mounted) setState(() => _error = WalletService.readableError(error));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(WalletService.readableError(error))),
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }

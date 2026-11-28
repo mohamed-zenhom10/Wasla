@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/main_button.dart';
+import 'package:main/components/second_button.dart';
 import 'package:main/models/shipment.dart';
 import 'package:main/pages/shipment_details_page.dart';
+import 'package:main/pages/your_activity_page.dart';
 import 'package:main/services/cargo_order_service.dart';
 import 'package:main/services/language_service.dart';
 import 'package:main/services/shipment_service.dart';
@@ -249,6 +251,15 @@ code: error.code,
                     TextButton(
                       onPressed: _isLoading ? null : _refreshQuotes,
                       child: const Text('Request fresh quotes'),
+                    ),
+                    const SizedBox(height: 8),
+                    WaslaButtonTwo(
+                      text: 'View trips',
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => YourActivityPage(),
+                        ),
+                      ),
                     ),
                   ],
                 ),

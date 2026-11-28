@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:main/pages/your_activity_page.dart';
 import 'package:main/screens/login_screen.dart';
 import 'package:main/screens/splash_screen.dart';
 import 'package:main/services/auth_service.dart';
@@ -14,6 +15,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  final TripsRefreshObserver _tripsRefreshObserver = TripsRefreshObserver();
+
   @override
   void initState() {
     super.initState();
@@ -44,6 +47,7 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: appNavigatorKey,
+      navigatorObservers: [_tripsRefreshObserver],
       title: 'Wasla',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

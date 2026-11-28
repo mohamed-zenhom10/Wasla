@@ -11,6 +11,8 @@ import 'package:main/services/cargo_order_service.dart';
 import 'package:main/services/shipment_service.dart';
 import 'package:main/theme/app_theme.dart';
 
+enum _ShipmentEditAction { withdraw, cancel, none }
+
 class DriverMatchingPage extends StatefulWidget {
   const DriverMatchingPage({super.key, this.shipmentId});
 
@@ -96,62 +98,31 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
     );
   }
 
-  Future<void> _editShipment() async {
-    final shipment = _shipment;
-    if (shipment == null) return;
-    final service = ShipmentService();
-    final catalog = await service.getCatalog();
-    final draft = CargoOrderDraft()
-      ..catalog = catalog
-      ..shipment = shipment
-      ..categoryId = shipment.cargoCategoryId
-      ..sizeOptionId = shipment.sizeOptionId
-      ..cargoDescription = shipment.cargoDescription ?? ''
-      ..pickupAddress = shipment.pickup?.address ?? ''
-      ..pickupLatitude = shipment.pickup?.latitude
-      ..pickupLongitude = shipment.pickup?.longitude
-      ..pickupNotes = shipment.pickup?.notes ?? ''
-      ..dropoffAddress = shipment.dropoff?.address ?? ''
-      ..dropoffLatitude = shipment.dropoff?.latitude
-      ..dropoffLongitude = shipment.dropoff?.longitude
-      ..dropoffNotes = shipment.dropoff?.notes ?? ''
-      ..itemCount = shipment.itemCount ?? 1
-      ..isFragile = shipment.isFragile ?? false
-      ..weightKg = shipment.weightKg
-      ..helpersCount = shipment.helpersCount ?? 0
-      ..pickupType = shipment.pickupType ?? 'now'
-      ..scheduledAt = shipment.pickupAt
-      ..paymentMethod = shipment.paymentMethod ?? 'cash'
-      ..farePaidBy = shipment.farePaidBy ?? 'sender'
-      ..recipientName = shipment.recipientName ?? ''
-      ..recipientPhone = shipment.recipientPhone ?? ''
-      ..requestedVehicleTypeId = shipment.requestedVehicleTypeId
-      ..useAiEstimate = false;
-
-    final category = catalog.categories
-        .where((item) => item.id == shipment.cargoCategoryId)
-        .fold<ShipmentCargoCategory?>(null, (previous, item) => item);
-    if (category != null) {
-      draft.category = category.nameEn;
-    }
-
-    if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => CargoCategoryPage(draft: draft)),
-    );
-  }
-
   Future<void> _cancelAndEdit() async {
     final shipment = _shipment;
     final id = widget.shipmentId;
     if (shipment == null || id == null || _isCancelling) return;
 
+    final action = _resolveEditAction(shipment);
+    if (action == _ShipmentEditAction.none) {
+      if (!mounted) return;
+      setState(() => _errorMessage = 'This shipment can no longer be edited.');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This shipment can no longer be edited.'),
+        ),
+      );
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel and edit?'),
-        content: const Text(
-          'This shipment will be cancelled and a new booking will be created with the same details.',
+        content: Text(
+          action == _ShipmentEditAction.withdraw
+              ? 'This accepted price will be withdrawn and a new booking will be created with the same details.'
+              : 'This shipment will be cancelled and a new booking will be created with the same details.',
         ),
         actions: [
           TextButton(
@@ -167,12 +138,61 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
     );
     if (confirmed != true || !mounted) return;
 
+    if (action == _ShipmentEditAction.withdraw) {
+      await _withdrawPriceAndEdit(shipment);
+      return;
+    }
     await _cancelShipment(shipment, acceptFee: false);
+  }
+
+  _ShipmentEditAction _resolveEditAction(Shipment shipment) {
+    if (shipment.status == 'draft') {
+      return shipment.acceptedQuote == null
+          ? _ShipmentEditAction.none
+          : _ShipmentEditAction.withdraw;
+    }
+    if (shipment.status == 'searching_driver') {
+      return _ShipmentEditAction.cancel;
+    }
+    final trip = shipment.trip;
+    final tripStatus = trip?.status;
+    if (tripStatus == 'assigned' ||
+        tripStatus == 'heading_to_pickup' ||
+        tripStatus == 'arrived_at_pickup') {
+      return _ShipmentEditAction.cancel;
+    }
+    if (tripStatus == 'cargo_loaded') {
+      return _ShipmentEditAction.none;
+    }
+    return _ShipmentEditAction.none;
+  }
+
+  Future<void> _withdrawPriceAndEdit(Shipment shipment) async {
+    setState(() => _isCancelling = true);
+    try {
+      await _service.withdrawPrice(shipment);
+      if (!mounted) return;
+      await _refresh();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Shipment withdrawn for editing.')),
+      );
+      await _startNewBookingFrom(shipment);
+    } on ShipmentApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _errorMessage = error.message);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
   }
 
   Future<void> _cancelShipment(
     Shipment shipment, {
     required bool acceptFee,
+    bool feeResolved = false,
   }) async {
     setState(() => _isCancelling = true);
     try {
@@ -181,52 +201,64 @@ class _DriverMatchingPageState extends State<DriverMatchingPage> {
         reason: 'Changed my mind',
         acceptFee: acceptFee,
       );
-if (!mounted) return;
-await _startNewBookingFrom(shipment);
-if (!mounted) return;
-ScaffoldMessenger.of(context).showSnackBar(
-const SnackBar(content: Text('Shipment cancelled successfully.')),
-);
-} on ShipmentApiException catch (error) {
-if (!mounted) return;
-if (error.code == 'CANCEL_FEE') {
-        final fee = error.details?['fee']?.toString();
-        final accepted = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Cancellation fee'),
-            content: Text(
-              fee == null
-                  ? 'A cancellation fee applies. Do you want to continue?'
-                  : 'A cancellation fee of $fee applies. Do you want to continue?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('No'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Yes'),
-              ),
-            ],
-          ),
+      if (!mounted) return;
+      await _refresh();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Shipment cancelled successfully.')),
+      );
+      await _startNewBookingFrom(shipment);
+    } on ShipmentApiException catch (error) {
+      if (!mounted) return;
+      if (error.code == 'CANCEL_FEE') {
+        if (!feeResolved) {
+          final fee = error.details?['fee']?.toString();
+          final accepted = await _confirmCancelFee(fee);
+          if (accepted == true) {
+            await _cancelShipment(shipment, acceptFee: true, feeResolved: true);
+          }
+        }
+        return;
+      }
+      if (error.code == 'CARGO_LOADED') {
+        setState(() => _errorMessage = error.message);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message)),
         );
-if (accepted == true && mounted) {
-await _cancelShipment(shipment, acceptFee: true);
-return;
-}
-return;
-}
-setState(() => _errorMessage = error.message);
-if (!mounted) return;
-ScaffoldMessenger.of(context).showSnackBar(
-SnackBar(content: Text(error.message)),
-);
-} finally {
-if (mounted) setState(() => _isCancelling = false);
-}
-}
+        return;
+      }
+      setState(() => _errorMessage = error.message);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
+  Future<bool?> _confirmCancelFee(String? fee) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancellation fee'),
+        content: Text(
+          fee == null
+              ? 'A cancellation fee applies. Do you want to continue?'
+              : 'A cancellation fee of $fee applies. Do you want to continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _startNewBookingFrom(Shipment shipment) async {
     final service = ShipmentService();
@@ -363,45 +395,30 @@ if (mounted) setState(() => _isCancelling = false);
                         style: const TextStyle(color: AppColors.accent),
                       ),
                     ],
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.light,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _InfoRow(
-                            label: 'Estimated match time',
-                            value: 'Not available',
-                          ),
-                          const SizedBox(height: 10),
-                          _InfoRow(
-                            label: 'Saved total',
-                            value: 'Not available',
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Keep booking details',
-                                  style: AppTypography.bodyMd,
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: _isCancelling ? null : _editShipment,
-                                child: const Text('Edit'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.light,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(height: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _InfoRow(
+                          label: 'Estimated match time',
+                          value: 'Not available',
+                        ),
+                        const SizedBox(height: 10),
+                        _InfoRow(
+                          label: 'Saved total',
+                          value: 'Not available',
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                     OutlinedButton(
                       onPressed: _isCancelling ? null : _viewDetails,
                       child: const Text('Details'),

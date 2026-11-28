@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:main/components/app_page_header.dart';
+import 'package:main/components/main_button.dart';
 import 'package:main/models/wallet.dart';
 import 'package:main/pages/add_money_page.dart';
 import 'package:main/pages/payment_methods_page.dart';
@@ -83,28 +84,31 @@ class _WalletPageState extends State<WalletPage> {
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
+                  child: MainButton(
+                    text: 'Add money',
                     onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => AddMoneyPage(onSubmitted: () => _load()),
-                  ),
-                );
-                if (mounted) _load();
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => AddMoneyPage(onSubmitted: () => _load()),
+                        ),
+                      );
+                      if (mounted) _load();
                     },
-                    child: const Text('Add money'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: OutlinedButton(
+                  child: WaslaButton(
+                    text: 'Withdraw balance',
                     onPressed: () async {
                       await Navigator.of(context).push(
-                        MaterialPageRoute<void>(builder: (_) => const WithdrawBalancePage()),
+                        MaterialPageRoute<void>(
+                          builder: (_) => const WithdrawBalancePage(),
+                        ),
                       );
                       if (mounted) _load();
                     },
-                    child: const Text('Withdraw balance'),
+                    variant: WaslaButtonVariant.secondary,
                   ),
                 ),
               ],
